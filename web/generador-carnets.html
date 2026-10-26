@@ -1,0 +1,1168 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Generador de carnets</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1e222b; --line:#2a303c;
+    --ink:#e8ecf3; --muted:#9aa4b2; --accent:#3b82f6; --ok:#22c55e;
+    --warn:#f59e0b; --bad:#ef4444; --chip:#242a35;
+    /* Colores de la plantilla (editables en la app) */
+    --card-bg:#ffffff; --card-ink:#111418; --card-accent:#1e40af; --card-band:#1e40af;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);font-size:14px;line-height:1.45}
+  header.app{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;
+    align-items:center;gap:10px;position:sticky;top:0;background:var(--bg);z-index:5}
+  header.app h1{font-size:16px;margin:0;font-weight:650}
+  header.app .sub{color:var(--muted);font-size:12px}
+  .wrap{max-width:1180px;margin:0 auto;padding:18px;display:grid;
+    grid-template-columns:1fr 1fr;gap:16px}
+  .full{grid-column:1 / -1}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+  .panel h2{margin:0;padding:12px 14px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;
+    color:var(--muted);border-bottom:1px solid var(--line);display:flex;justify-content:space-between;
+    align-items:center;gap:8px;background:var(--panel2)}
+  .panel .body{padding:14px}
+  .chip{background:var(--chip);border:1px solid var(--line);border-radius:999px;
+    padding:2px 9px;font-size:11px;color:var(--muted)}
+  label.field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px;font-size:12.5px}
+  label.field>span{color:var(--muted)}
+  input[type=text],input[type=search],input[type=number],input[type=date],select,textarea{
+    background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;
+    padding:8px 10px;font-size:13px;font-family:inherit;width:100%}
+  input[type=color]{width:46px;height:34px;padding:2px;border:1px solid var(--line);
+    border-radius:8px;background:var(--panel2);cursor:pointer}
+  input[type=range]{width:100%;accent-color:var(--accent);cursor:pointer}
+  .vval{color:var(--ink);font-weight:600}
+  textarea{resize:vertical;min-height:52px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .btn{background:var(--panel2);border:1px solid var(--line);color:var(--ink);
+    border-radius:8px;padding:9px 14px;font-size:13px;cursor:pointer;font-family:inherit}
+  .btn:hover{border-color:#3a4252}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .btn.primary:hover{filter:brightness(1.08)}
+  .btn.sm{padding:5px 10px;font-size:12px}
+  .btn.danger{color:#fff;background:var(--bad);border-color:var(--bad)}
+  .filebtn{position:relative;overflow:hidden;display:inline-flex}
+  .filebtn input[type=file]{position:absolute;inset:0;opacity:0;cursor:pointer}
+  .thumbrow{display:flex;gap:8px;align-items:center;margin-top:4px}
+  .thumb{width:46px;height:46px;border:1px solid var(--line);border-radius:6px;object-fit:contain;
+    background:#0b0d11}
+  .note{color:var(--muted);font-size:12px;margin:8px 0 0}
+  .status{margin-top:10px;font-size:12.5px;min-height:18px}
+  .status.ok{color:var(--ok)} .status.bad{color:var(--bad)} .status.warn{color:var(--warn)}
+  .validmsg{font-size:11.5px;margin-top:-4px}
+  .validmsg.ok{color:var(--ok)} .validmsg.bad{color:var(--bad)}
+
+  /* ---- Tarjeta ---- */
+  .faces{display:flex;gap:16px;flex-wrap:wrap;justify-content:center;margin-bottom:10px}
+  .face-wrap{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .face-wrap>span{font-size:11px;color:var(--muted)}
+  /* Edición directa: solo en la vista previa (la imagen que se imprime no lleva contenteditable) */
+  .frame [contenteditable]{cursor:text;border-radius:2px;outline:1px dashed transparent;outline-offset:1px;
+    transition:outline-color .15s}
+  .frame:hover [contenteditable]{outline-color:rgba(127,127,127,.35)}
+  .frame [contenteditable]:hover{outline-color:var(--card-accent,#3b82f6)}
+  .frame [contenteditable]:focus{outline:1.5px solid var(--card-accent,#3b82f6);background:rgba(255,255,255,.18)}
+  .frame [contenteditable].is-empty{opacity:.55;font-style:italic}
+  .frame .photo,.frame [data-upload]{cursor:pointer}
+  .card .ph-slot{border:1px dashed rgba(255,255,255,.7);border-radius:4px;color:rgba(255,255,255,.9);
+    font-size:8px;padding:0 5px;height:30px;display:flex;align-items:center;justify-content:center;white-space:nowrap}
+  .card .ph-slot.sign-slot{border-color:#9aa4b2;color:#6b7480;height:28px;margin:0 auto 2px;width:60%}
+  .card .ph-chip{position:absolute;left:12px;bottom:4px;z-index:2;font-size:8px;color:#6b7480;
+    border:1px dashed #9aa4b2;border-radius:999px;padding:1px 6px;background:rgba(255,255,255,.8)}
+  .faces.stacked{flex-direction:column;align-items:center;gap:12px}
+  .card-tools{display:grid;grid-template-columns:1fr 1fr;gap:0 10px;margin-top:14px;
+    padding-top:12px;border-top:1px solid var(--line)}
+  .card-tools .field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px;font-size:12.5px}
+  .card-tools .field>span{color:var(--muted)}
+  .card-tools .span2{grid-column:1 / -1}
+  .row.nowrap{flex-wrap:nowrap}
+  /* Zona segura de 3 mm (12 px a 4 px/mm): solo pantalla, la imagen impresa no la lleva */
+  .frame::after{content:"";position:absolute;inset:12px;border:1px dashed rgba(239,68,68,.45);
+    border-radius:4px;pointer-events:none}
+  .inline-hint{font-size:11px;color:var(--muted);text-align:center;margin:6px 0 0}
+  .frame{position:relative;width:342.4px;height:216px;border-radius:12px;overflow:hidden;
+    box-shadow:0 6px 24px rgba(0,0,0,.45);background:#fff}
+  /* Tarjeta real: 85.6 x 54 mm. 342.4px = 85.6mm a 4px/mm en preview */
+  .card{width:342.4px;height:216px;position:relative;background:var(--card-bg);
+    color:var(--card-ink);font-family:Arial,Helvetica,sans-serif;overflow:hidden}
+  .card .seal{position:absolute;inset:-30%;pointer-events:none;background-repeat:repeat;
+    background-position:center;transform:rotate(-22deg)}
+  .card .band{height:52px;background:var(--card-band);color:#fff;display:flex;align-items:center;
+    gap:8px;padding:0 10px}
+  .card .band .bandside{flex:0 0 auto;display:flex;align-items:center;gap:6px;min-width:40px}
+  .card .band .bandside.right{justify-content:flex-end}
+  .card .band img{height:34px;width:auto;object-fit:contain}
+  .card .band .titles{flex:1;display:flex;flex-direction:column;line-height:1.12;text-align:center;min-width:0}
+  .card .band .org{font-size:12px;font-weight:700;letter-spacing:.02em;line-height:1.08;
+    display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
+  .card .band .org.long{font-size:10px}
+  .card .band .ctitle{font-size:9.5px;opacity:.9;text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+  .card .front-body{display:flex;gap:10px;padding:9px 12px}
+  .card .photo{width:88px;height:108px;border:2px solid var(--card-accent);border-radius:6px;
+    object-fit:cover;background:#eef1f5;flex:0 0 auto}
+  .card .photo.ph{display:flex;align-items:center;justify-content:center;color:#9aa4b2;font-size:10px}
+  .card .fields{flex:1;min-width:0;display:flex;flex-direction:column}
+  .card .fld{margin-bottom:3px}
+  .card .fld .k{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#4b5563;line-height:1.1}
+  .card .fld .v{font-size:12px;font-weight:650;color:var(--card-ink);line-height:1.12;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis}
+  .card .fld .v.big{font-size:13px}
+  /* Datos que van por el panel K (negro resina): negro puro, ver rasterizeFace */
+  .card .kblack,.card .fld .v.kblack{color:#000}
+  .card .footer{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:auto;padding-top:2px}
+  .card .dates{display:flex;gap:12px}
+  .card .code{text-align:right;flex:0 0 auto}
+  .card .code .k{font-size:8.5px;font-weight:700;color:#4b5563;text-transform:uppercase}
+  .card .code .v{font-size:12px;font-weight:700;color:var(--card-accent);letter-spacing:.04em}
+  /* Reverso */
+  .card.back{padding:14px;display:flex;flex-direction:column}
+  .card.back .legend{font-size:10px;font-weight:600;color:#111418;line-height:1.35;white-space:pre-wrap}
+  .card.back .sign{margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
+  .card.back .sign .box{text-align:center;flex:1}
+  .card.back .sign img{height:34px;object-fit:contain}
+  .card.back .sign .line{border-top:1px solid #333;margin-top:2px;padding-top:3px;font-size:9px;font-weight:600;color:#111418}
+  .card.back .contact{font-size:9.5px;font-weight:600;color:#111418;text-align:center;margin-top:8px}
+  .card.back .backband{height:52px;background:var(--card-band);margin:-14px -14px 12px;
+    display:flex;align-items:center;justify-content:center;padding:0 10px;color:#fff}
+  .card.back .backband .org{font-size:12px;font-weight:700;letter-spacing:.02em;line-height:1.08;
+    text-align:center;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+    overflow:hidden;word-break:break-word}
+  .card.back .backband .org.long{font-size:10px}
+
+  /* ---- Registro ---- */
+  .reg-tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+  .reg-tools input[type=search]{flex:1;min-width:180px}
+  .table-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px;max-height:360px}
+  table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+  th,td{padding:7px 9px;border-bottom:1px solid var(--line);text-align:left}
+  thead th{position:sticky;top:0;background:var(--panel2);color:var(--muted);font-weight:600;
+    text-transform:uppercase;font-size:10.5px;letter-spacing:.04em}
+  tbody tr:hover{background:#1b1f28}
+  .badge{padding:2px 7px;border-radius:999px;font-size:10.5px;font-weight:600}
+  .badge.vig{background:rgba(34,197,94,.15);color:#4ade80}
+  .badge.ven{background:rgba(245,158,11,.15);color:#fbbf24}
+  .badge.anu{background:rgba(239,68,68,.15);color:#f87171}
+  .stats{font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0}
+
+  /* ---- Impresión ---- */
+  #print-area{display:none}
+  @media print{
+    body *{visibility:hidden}
+    #print-area,#print-area *{visibility:visible}
+    #print-area{display:block;position:absolute;inset:0;background:#fff}
+    .pg-cr80{width:85.6mm;height:54mm;page-break-after:always;position:relative;overflow:hidden;margin:0}
+    .pg-carta{width:210mm;min-height:297mm;page-break-after:always;padding:18mm 12mm;position:relative}
+    .carta-card{width:85.6mm;height:54mm;position:relative;overflow:hidden;
+      outline:1px dashed #bbb;margin:0 auto 10mm}
+    @page{size:auto;margin:0}
+  }
+  @media (max-width:860px){.wrap{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<header class="app">
+  <h1>Generador de carnets</h1>
+  <span class="sub">Tamaño cédula (CR80, 85.6 × 54 mm) · frente y reverso · registro local</span>
+</header>
+
+<div class="wrap">
+
+  <!-- Plantilla -->
+  <section class="panel">
+    <h2><span>Plantilla</span><span class="chip">Diseño de la organización</span></h2>
+    <div class="body">
+      <label class="field"><span>Organización (tuya)</span>
+        <input type="text" id="t-org" value="GOLDAPPLEGROUP SRL" placeholder="Ej. GoldAppleGroup SRL, tu evento, tu empresa"></label>
+      <label class="field"><span>Título del carnet</span>
+        <input type="text" id="t-title" value="Carnet de identificación" placeholder="Ej. Carnet de empleado / Credencial de acceso"></label>
+
+      <div class="grid2">
+        <label class="field"><span>Tamaño letra organización <span class="vval" id="v-orgsize"></span></span>
+          <input type="range" id="t-orgsize" value="12" min="8" max="20" step="0.5"></label>
+        <label class="field"><span>Negrita organización</span>
+          <select id="t-orgbold"><option value="700">Sí</option><option value="400">No</option></select></label>
+      </div>
+      <div class="grid2">
+        <label class="field"><span>Tamaño letra título <span class="vval" id="v-titlesize"></span></span>
+          <input type="range" id="t-titlesize" value="9.5" min="7" max="16" step="0.5"></label>
+        <label class="field"><span>Negrita título</span>
+          <select id="t-titlebold"><option value="400">No</option><option value="700">Sí</option></select></label>
+      </div>
+
+      <div class="grid2">
+        <div>
+          <label class="field"><span>Logo 1 (banda)</span></label>
+          <div class="row">
+            <span class="btn sm filebtn">Subir<input type="file" id="t-logo1" accept="image/*"></span>
+            <img class="thumb" id="th-logo1" alt="" hidden>
+            <button class="btn sm" data-clear="logo1" type="button">Quitar</button>
+          </div>
+        </div>
+        <div>
+          <label class="field"><span>Logo 2 (banda)</span></label>
+          <div class="row">
+            <span class="btn sm filebtn">Subir<input type="file" id="t-logo2" accept="image/*"></span>
+            <img class="thumb" id="th-logo2" alt="" hidden>
+            <button class="btn sm" data-clear="logo2" type="button">Quitar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid2" style="margin-top:8px">
+        <div>
+          <label class="field"><span>Sello / marca de agua (fondo)</span></label>
+          <div class="row">
+            <span class="btn sm filebtn">Subir<input type="file" id="t-seal" accept="image/*"></span>
+            <img class="thumb" id="th-seal" alt="" hidden>
+            <button class="btn sm" data-clear="seal" type="button">Quitar</button>
+          </div>
+        </div>
+        <div>
+          <label class="field"><span>Firma (reverso)</span></label>
+          <div class="row">
+            <span class="btn sm filebtn">Subir<input type="file" id="t-sign" accept="image/*"></span>
+            <img class="thumb" id="th-sign" alt="" hidden>
+            <button class="btn sm" data-clear="sign" type="button">Quitar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid3" style="margin-top:8px">
+        <label class="field"><span>Color banda</span><input type="color" id="t-band" value="#1e40af"></label>
+        <label class="field"><span>Color acento</span><input type="color" id="t-accent" value="#1e40af"></label>
+        <label class="field"><span>Fondo tarjeta</span><input type="color" id="t-cardbg" value="#ffffff"></label>
+      </div>
+
+      <label class="field"><span>Imagen del fondo diseminado (detrás del texto)</span>
+        <select id="t-sealsrc">
+          <option value="seal">Sello / marca de agua</option>
+          <option value="logo1">Logo 1</option>
+          <option value="logo2">Logo 2</option>
+        </select></label>
+      <div class="grid2">
+        <label class="field"><span>Densidad del fondo <span class="vval" id="v-sealsize"></span></span>
+          <input type="range" id="t-sealsize" value="80" min="24" max="220" step="2"></label>
+        <label class="field"><span>Intensidad del fondo <span class="vval" id="v-sealop"></span></span>
+          <input type="range" id="t-sealop" value="7" min="2" max="45" step="1"></label>
+      </div>
+      <p class="note" style="margin-top:-2px">Densidad: a la izquierda = logos más pequeños y más repetidos; a la derecha = más grandes. Intensidad: qué tan marcado se ve el fondo.</p>
+
+      <div class="grid2">
+        <label class="field"><span>Nombre bajo la firma</span>
+          <input type="text" id="t-signname" placeholder="Ej. Director / Responsable"></label>
+        <label class="field"><span>Contacto (pie del reverso)</span>
+          <input type="text" id="t-contact" placeholder="Tel. / correo / web"></label>
+      </div>
+
+      <label class="field"><span>Leyenda del reverso</span>
+        <textarea id="t-legend" placeholder="Texto que aparece al reverso: condiciones de uso, aviso de devolución, etc."></textarea></label>
+
+      <div class="grid2">
+        <label class="field"><span>Vigencia</span>
+          <div class="row">
+            <input type="number" id="t-valnum" value="1" min="1" style="width:70px">
+            <select id="t-valunit"><option value="years">año(s)</option><option value="months">mes(es)</option></select>
+          </div></label>
+        <label class="field"><span>Prefijo de código</span>
+          <input type="text" id="t-prefix" value="GAG-" placeholder="Ej. GAG-"></label>
+      </div>
+
+      <div class="row">
+        <button class="btn sm" id="save-tpl" type="button">Guardar plantilla</button>
+        <button class="btn sm" id="load-tpl" type="button">Cargar plantilla guardada</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- Titular: se edita directo sobre la tarjeta -->
+  <section class="panel">
+    <h2><span>Carnet</span><span class="chip">Toca la tarjeta para editar</span></h2>
+    <div class="body">
+      <div class="faces stacked">
+        <div class="face-wrap"><span>Frente</span><div class="frame" id="pv-front"></div></div>
+        <div class="face-wrap"><span>Reverso</span><div class="frame" id="pv-back"></div></div>
+      </div>
+      <p class="inline-hint">Toca cualquier texto para cambiarlo ahí mismo (Enter para terminar, Esc para cancelar). Toca la foto para subir otra.</p>
+      <div class="validmsg" id="ced-msg" style="text-align:center;margin:4px 0 0"></div>
+
+      <!-- Campos de respaldo: la tarjeta escribe aquí; el resto del programa los lee -->
+      <div hidden>
+        <input type="text" id="d-name">
+        <input type="text" id="d-ced" inputmode="numeric">
+        <input type="text" id="d-code">
+        <input type="text" id="d-cat">
+      </div>
+
+      <div class="card-tools">
+        <label class="field"><span>Fecha de emisión</span>
+          <input type="date" id="d-issue"></label>
+        <label class="field"><span>Expira (automática)</span>
+          <input type="text" id="d-expiry" readonly placeholder="—"></label>
+        <label class="field"><span>Dato extra (opcional)</span>
+          <input type="text" id="d-extra" placeholder="Tipo de sangre, área…"></label>
+        <div class="field"><span>Foto del titular</span>
+          <div class="row">
+            <span class="btn sm filebtn">Subir<input type="file" id="d-photo" accept="image/*"></span>
+            <img class="thumb" id="th-photo" alt="" hidden>
+            <button class="btn sm" data-clear="photo" type="button">Quitar</button>
+          </div>
+        </div>
+        <label class="field span2"><span>Buscar por cédula</span>
+          <div class="row nowrap">
+            <input type="search" id="lookup-ced" placeholder="000-0000000-0">
+            <button class="btn sm" id="lookup-btn" type="button">Traer</button>
+            <button class="btn sm" id="clear-titular" type="button" title="Vacía los datos y la foto del titular">Limpiar titular</button>
+          </div></label>
+      </div>
+    </div>
+  </section>
+
+  <!-- Impresión -->
+  <section class="panel full">
+    <h2><span>Impresión</span><span class="chip">Tamaño real al imprimir</span></h2>
+    <div class="body">
+      <div class="grid3">
+        <label class="field"><span>Impresora</span>
+          <select id="printer">
+            <option value="entrust">ENTRUST · Sigma DS3 (esta PC)</option>
+            <option value="zc300">Zebra ZC300</option>
+            <option value="zc300-api">Zebra ZC300 · vía middleware (API)</option>
+            <option value="entrust-api">ENTRUST Sigma DS3 · vía middleware (API)</option>
+            <option value="carta">Hoja carta (sin impresora de carnets)</option>
+          </select></label>
+        <label class="field"><span>Desplazamiento X (mm)</span>
+          <input type="number" id="off-x" value="0" step="0.1"></label>
+        <label class="field"><span>Desplazamiento Y (mm)</span>
+          <input type="number" id="off-y" value="0" step="0.1"></label>
+      </div>
+      <div class="row" style="margin-top:4px;align-items:center;flex-wrap:wrap;gap:10px">
+        <label class="field" style="margin:0"><span><input type="checkbox" id="opt-bleed"> Sangrado borde a borde</span></label>
+        <label class="field" style="margin:0"><span><input type="checkbox" id="opt-rotate"> Girar reverso 180°</span></label>
+        <label class="field" style="margin:0" title="Entrust: una sola tanda de cinta para ambas caras. Frente a color; el reverso sale solo en negro (K). Ahorra cinta y tiempo."><span><input type="checkbox" id="opt-split"> Split ribbon (reverso solo negro, Entrust API)</span></label>
+        <button class="btn sm" id="cal-test" type="button">Imprimir tarjeta de calibración</button>
+        <button class="btn sm" id="cal-reset" type="button">Restablecer</button>
+      </div>
+
+      <details id="api-cfg" style="margin-top:10px">
+        <summary class="note" style="cursor:pointer">Conexión al middleware (impresoras “vía API”)</summary>
+        <div class="grid2" style="margin-top:8px">
+          <label class="field"><span>URL del middleware</span>
+            <input type="text" id="api-url" placeholder="http://localhost:8080"></label>
+          <label class="field"><span>API key</span>
+            <input type="password" id="api-key" autocomplete="off" placeholder="X-API-Key"></label>
+        </div>
+        <div class="row"><button class="btn sm" id="api-test" type="button">Probar conexión</button></div>
+      </details>
+
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary" id="generate" type="button">Generar, registrar e imprimir</button>
+        <button class="btn" id="preview-print" type="button">Solo imprimir (sin registrar)</button>
+      </div>
+      <div class="status" id="status" role="status"></div>
+      <p class="note" id="printer-note"></p>
+    </div>
+  </section>
+
+  <!-- Registro -->
+  <section class="panel full">
+    <h2><span>Registro de carnets emitidos</span><span class="stats" id="stats"></span></h2>
+    <div class="body">
+      <div class="reg-tools">
+        <input type="search" id="reg-q" placeholder="Buscar por nombre, cédula, código o control">
+        <button class="btn sm" id="exp-csv" type="button">Exportar CSV</button>
+        <button class="btn sm" id="exp-json" type="button">Respaldo completo (JSON)</button>
+        <span class="btn sm filebtn">Restaurar respaldo<input type="file" id="imp-json" accept="application/json,.json"></span>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Control</th><th>Generado</th><th>Titular</th><th>Cédula</th><th>Código</th>
+            <th>Categoría</th><th>Organización</th><th>Emisión</th><th>Expira</th><th>Impr.</th>
+            <th>Estado</th><th>Acciones</th>
+          </tr></thead>
+          <tbody id="reg-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div id="print-area"></div>
+
+<script>
+(() => {
+"use strict";
+const $ = (s,r=document)=>r.querySelector(s);
+const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
+const esc = s => String(s??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------- IndexedDB ---------- */
+const DB_NAME="carnets_db", STORE="cards", TSTORE="tpl";
+let db;
+function openDB(){
+  return new Promise((res,rej)=>{
+    const r=indexedDB.open(DB_NAME,1);
+    r.onupgradeneeded=e=>{
+      const d=e.target.result;
+      if(!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE,{keyPath:"control"});
+      if(!d.objectStoreNames.contains(TSTORE)) d.createObjectStore(TSTORE,{keyPath:"id"});
+    };
+    r.onsuccess=e=>{db=e.target.result;res(db)};
+    r.onerror=e=>rej(e);
+  });
+}
+function tx(store,mode){return db.transaction(store,mode).objectStore(store);}
+function getAll(){return new Promise(r=>{const q=tx(STORE,"readonly").getAll();q.onsuccess=()=>r(q.result||[])});}
+function putCard(c){return new Promise(r=>{const q=tx(STORE,"readwrite").put(c);q.onsuccess=()=>r()});}
+function saveTplDB(obj){return new Promise(r=>{const q=tx(TSTORE,"readwrite").put({id:"default",data:obj});q.onsuccess=()=>r()});}
+function loadTplDB(){return new Promise(r=>{const q=tx(TSTORE,"readonly").get("default");q.onsuccess=()=>r(q.result?q.result.data:null)});}
+
+/* ---------- Estado de imágenes (dataURL) ---------- */
+const img={logo1:null,logo2:null,seal:null,sign:null,photo:null};
+function wireFile(inputId,key,thumbId){
+  $("#"+inputId).addEventListener("change",e=>{
+    const f=e.target.files[0]; if(!f) return;
+    const fr=new FileReader();
+    fr.onload=()=>{img[key]=fr.result; const t=$("#"+thumbId); if(t){t.src=fr.result;t.hidden=false} render();};
+    fr.readAsDataURL(f);
+  });
+}
+wireFile("t-logo1","logo1","th-logo1");
+wireFile("t-logo2","logo2","th-logo2");
+wireFile("t-seal","seal","th-seal");
+wireFile("t-sign","sign","th-sign");
+wireFile("d-photo","photo","th-photo");
+$$("[data-clear]").forEach(b=>b.addEventListener("click",()=>{
+  const k=b.dataset.clear; img[k]=null;
+  const map={logo1:"th-logo1",logo2:"th-logo2",seal:"th-seal",sign:"th-sign",photo:"th-photo"};
+  const t=$("#"+map[k]); if(t){t.hidden=true;t.src=""}
+  if(k==="photo") draftDirty=true;
+  render();
+}));
+
+/* ---------- Borrador del titular ----------
+   Nombre, cédula, código, categoría, dato extra, fecha y foto se guardan solos en
+   este navegador (localStorage) mientras se llenan, y se borran cuando el carnet
+   se imprime bien o con "Limpiar titular". Así una recarga no pierde lo escrito. */
+const DRAFT_KEY="carnet-borrador-titular";
+const DRAFT_FIELDS=["d-name","d-ced","d-code","d-cat","d-extra","d-issue"];
+let draftDirty=false, draftTimer=0;
+function saveDraft(){
+  if(!draftDirty) return;
+  clearTimeout(draftTimer);
+  draftTimer=setTimeout(()=>{
+    const o=Object.fromEntries(DRAFT_FIELDS.map(id=>[id,$("#"+id).value]));
+    o.photo=img.photo||"";
+    try{ localStorage.setItem(DRAFT_KEY,JSON.stringify(o)); }
+    catch{ try{ o.photo=""; localStorage.setItem(DRAFT_KEY,JSON.stringify(o)); }catch{} }  // foto muy grande
+  },400);
+}
+function restoreDraft(){
+  let o=null; try{ o=JSON.parse(localStorage.getItem(DRAFT_KEY)||"null"); }catch{}
+  if(!o) return false;
+  DRAFT_FIELDS.forEach(id=>{ if(o[id]!=null && o[id]!=="") $("#"+id).value=o[id]; });
+  if(o.photo){ img.photo=o.photo; const t=$("#th-photo"); t.src=o.photo; t.hidden=false; }
+  $("#d-ced").dispatchEvent(new Event("input"));   // formato y validación de la cédula
+  return true;
+}
+function clearDraft(){
+  clearTimeout(draftTimer); draftDirty=false;
+  try{ localStorage.removeItem(DRAFT_KEY); }catch{}
+}
+function clearTitular(){
+  ["d-name","d-ced","d-code","d-cat","d-extra"].forEach(id=>$("#"+id).value="");
+  $("#d-issue").value=todayISO();
+  img.photo=null; const t=$("#th-photo"); t.hidden=true; t.src="";
+  $("#ced-msg").textContent=""; $("#ced-msg").className="validmsg";
+  clearDraft(); render();
+}
+DRAFT_FIELDS.forEach(id=>$("#"+id).addEventListener("input",()=>{draftDirty=true;}));
+$("#d-issue").addEventListener("change",()=>{draftDirty=true;});
+$("#d-photo").addEventListener("change",()=>{draftDirty=true;});
+
+/* ---------- Validación de cédula RD ---------- */
+function digits(s){return String(s||"").replace(/\D/g,"");}
+function fmtCed(s){const d=digits(s).slice(0,11);
+  if(d.length<=3) return d;
+  if(d.length<=10) return d.slice(0,3)+"-"+d.slice(3);
+  return d.slice(0,3)+"-"+d.slice(3,10)+"-"+d.slice(10);}
+function validCed(s){
+  const d=digits(s); if(d.length!==11) return false;
+  let sum=0;
+  for(let i=0;i<10;i++){
+    let m=(i%2===0)?1:2, p=parseInt(d[i],10)*m;
+    if(p>9) p-=9; sum+=p;
+  }
+  const chk=(10-(sum%10))%10;
+  return chk===parseInt(d[10],10);
+}
+$("#d-ced").addEventListener("input",e=>{
+  e.target.value=fmtCed(e.target.value);
+  const m=$("#ced-msg"); const d=digits(e.target.value);
+  if(d.length===0){m.textContent="";m.className="validmsg";}
+  else if(d.length<11){m.textContent="Cédula incompleta";m.className="validmsg bad";}
+  else if(validCed(e.target.value)){m.textContent="✓ Cédula válida";m.className="validmsg ok";}
+  else {m.textContent="✗ Dígito verificador no coincide";m.className="validmsg bad";}
+  render();
+});
+
+/* ---------- Fechas ---------- */
+function todayISO(){const d=new Date();return d.toISOString().slice(0,10);}
+$("#d-issue").value=todayISO();
+function calcExpiry(){
+  const base=$("#d-issue").value||todayISO();
+  const n=parseInt($("#t-valnum").value||"1",10);
+  const unit=$("#t-valunit").value;
+  const d=new Date(base+"T00:00:00");
+  if(unit==="years") d.setFullYear(d.getFullYear()+n); else d.setMonth(d.getMonth()+n);
+  return d.toISOString().slice(0,10);
+}
+function fmtDate(iso){if(!iso) return "—";const[y,m,dd]=iso.split("-");return `${dd}/${m}/${y}`;}
+
+/* ---------- Render tarjeta ---------- */
+function tpl(){return{
+  org:$("#t-org").value, title:$("#t-title").value, band:$("#t-band").value,
+  accent:$("#t-accent").value, cardbg:$("#t-cardbg").value, signname:$("#t-signname").value,
+  contact:$("#t-contact").value, legend:$("#t-legend").value, valnum:$("#t-valnum").value,
+  valunit:$("#t-valunit").value, prefix:$("#t-prefix").value,
+  sealsize:$("#t-sealsize").value, sealop:$("#t-sealop").value, sealsrc:$("#t-sealsrc").value,
+  orgsize:$("#t-orgsize").value, orgbold:$("#t-orgbold").value,
+  titlesize:$("#t-titlesize").value, titlebold:$("#t-titlebold").value
+};}
+function titleStyles(t){
+  return{
+    org:`font-size:${t.orgsize||12}px;font-weight:${t.orgbold||700}`,
+    title:`font-size:${t.titlesize||9.5}px;font-weight:${t.titlebold||400}`
+  };
+}
+function sealImg(t){return img[t.sealsrc||"seal"];}
+function sealStyle(t){
+  const src=sealImg(t);
+  const size=parseInt(t.sealsize||80,10);
+  const op=(parseFloat(t.sealop||7)||7)/100;
+  return `background-image:url('${src}');background-size:${size}px;opacity:${op}`;
+}
+function data(){
+  const issue=$("#d-issue").value||todayISO();
+  const expiry=calcExpiry();
+  $("#d-expiry").value=fmtDate(expiry);
+  return{
+    name:$("#d-name").value, ced:$("#d-ced").value, code:$("#d-code").value,
+    cat:$("#d-cat").value, extra:$("#d-extra").value, issue, expiry
+  };
+}
+// preview=true: la vista previa agrega huecos tocables (logos, dato extra); la imagen impresa no.
+function cardFrontHTML(t,d,preview=false){
+  const photo = img.photo
+    ? `<img class="photo" src="${img.photo}" alt="">`
+    : `<div class="photo ph">FOTO</div>`;
+  const seal = sealImg(t) ? `<div class="seal" style="${sealStyle(t)}"></div>` : "";
+  const logo=(k,id,label)=>img[k]
+    ? `<img src="${img[k]}" alt=""${preview?` data-upload="${id}" title="Toca para cambiar el ${label}"`:""}>`
+    : preview?`<div class="ph-slot" data-upload="${id}" title="Toca para subir el ${label}">+ ${label}</div>`:"";
+  const l1 = logo("logo1","t-logo1","logo 1");
+  const l2 = logo("logo2","t-logo2","logo 2");
+  const sealChip = preview && !sealImg(t) ? `<div class="ph-chip" data-upload="t-seal" title="Toca para subir el sello / marca de agua">+ sello</div>` : "";
+  return `<div class="card" style="--card-bg:${t.cardbg};--card-band:${t.band};--card-accent:${t.accent}">
+    ${seal}${sealChip}
+    <div class="band">
+      <div class="bandside left">${l1}</div>
+      <div class="titles"><span class="org${(t.org||"").length>25?" long":""}" style="${titleStyles(t).org}" data-bind="t-org">${esc(t.org)||"ORGANIZACIÓN"}</span>
+        <span class="ctitle" style="${titleStyles(t).title}" data-bind="t-title">${esc(t.title)||"Carnet"}</span></div>
+      <div class="bandside right">${l2}</div>
+    </div>
+    <div class="front-body">${photo}
+      <div class="fields">
+        <div class="fld"><div class="k kblack">Nombre</div><div class="v big kblack" data-bind="d-name">${esc(d.name)||"—"}</div></div>
+        <div class="fld"><div class="k kblack">Cédula</div><div class="v kblack" data-bind="d-ced">${esc(d.ced)||"—"}</div></div>
+        <div class="fld"><div class="k kblack">Categoría</div><div class="v kblack" data-bind="d-cat">${esc(d.cat)||"—"}</div></div>
+        ${d.extra||preview?`<div class="fld"><div class="k kblack">—</div><div class="v kblack" data-bind="d-extra">${esc(d.extra)}</div></div>`:""}
+        <div class="footer">
+          <div class="dates">
+            <div class="fld"><div class="k kblack">Fecha de emisión</div><div class="v kblack">${fmtDate(d.issue)}</div></div>
+            <div class="fld"><div class="k kblack">Fecha de expiración</div><div class="v kblack">${fmtDate(d.expiry)}</div></div>
+          </div>
+          <div class="code"><div class="k kblack">Código</div><div class="v" data-bind="d-code">${esc(d.code)||"—"}</div></div>
+        </div>
+      </div>
+    </div></div>`;
+}
+function cardBackHTML(t,d,preview=false){
+  const seal = sealImg(t) ? `<div class="seal" style="${sealStyle(t)}"></div>` : "";
+  const sign = img.sign
+    ? `<img src="${img.sign}" alt=""${preview?` data-upload="t-sign" title="Toca para cambiar la firma"`:""}>`
+    : preview?`<div class="ph-slot sign-slot" data-upload="t-sign" title="Toca para subir la firma">+ firma</div>`:"";
+  return `<div class="card back" style="--card-bg:${t.cardbg};--card-band:${t.band};--card-accent:${t.accent}">
+    ${seal}
+    <div class="backband"><span class="org${(t.org||"").length>25?" long":""}" style="${titleStyles(t).org}" data-bind="t-org">${esc(t.org)||""}</span></div>
+    <div class="legend kblack" data-bind="t-legend">${esc(t.legend)||"Este carnet es propiedad de la organización emisora. En caso de extravío, favor devolverlo."}</div>
+    <div class="sign">
+      <div class="box">${sign}<div class="line kblack" data-bind="t-signname">${esc(t.signname)||"Firma autorizada"}</div></div>
+    </div>
+    <div class="contact kblack" data-bind="t-contact">${esc(t.contact)||""}</div>
+  </div>`;
+}
+function render(){
+  const t=tpl(), d=data();
+  $("#v-orgsize").textContent=t.orgsize+" px";
+  $("#v-titlesize").textContent=t.titlesize+" px";
+  $("#v-sealsize").textContent=t.sealsize+" px";
+  $("#v-sealop").textContent=t.sealop+" %";
+  $("#pv-front").innerHTML=cardFrontHTML(t,d,true);
+  $("#pv-back").innerHTML=cardBackHTML(t,d,true);
+  enableInlineEdit();
+  scheduleAutosave();
+  saveDraft();
+}
+
+/* ---------- Edición directa en la vista previa ----------
+   Cada texto con data-bind="<id del campo>" se edita tocándolo; el valor va al
+   campo del formulario y la tarjeta se vuelve a dibujar al salir (Enter o clic fuera). */
+// Texto guía de los campos vacíos: solo en pantalla, la imagen impresa no lo lleva.
+const INLINE_HINTS={"d-name":"Nombre y apellidos","d-ced":"000-0000000-0","d-cat":"Cargo o categoría",
+  "d-code":"Auto","d-extra":"Dato extra","t-contact":"Tel. / correo / web (opcional)"};
+function enableInlineEdit(){
+  $$("#pv-front [data-bind], #pv-back [data-bind]").forEach(el=>{
+    const field=$("#"+el.dataset.bind); if(!field) return;
+    el.contentEditable="plaintext-only";
+    el.spellcheck=false;
+    el.title="Toca para editar";
+    if(!field.value.trim()){
+      el.classList.add("is-empty");
+      if(INLINE_HINTS[field.id]) el.textContent=INLINE_HINTS[field.id];
+    }
+  });
+  $$("#pv-front .photo").forEach(el=>el.title="Toca para cambiar la foto");
+}
+function inlineCommit(el){
+  const field=$("#"+el.dataset.bind); if(!field) return;
+  const multiline=field.tagName==="TEXTAREA";
+  let v=el.innerText.replace(/ /g," ");
+  v=multiline?v.trim():v.replace(/\s+/g," ").trim();
+  if(field.value!==v){ field.value=v; field.dispatchEvent(new Event("input",{bubbles:true})); }
+  else render();
+}
+["#pv-front","#pv-back"].forEach(sel=>{
+  const host=$(sel);
+  host.addEventListener("focusin",e=>{
+    const el=e.target.closest("[data-bind]"); if(!el) return;
+    if(el.classList.contains("is-empty")){ el.textContent=""; el.classList.remove("is-empty"); }
+    // seleccionar todo el texto: escribir reemplaza, flechas permiten corregir
+    const r=document.createRange(); r.selectNodeContents(el);
+    const s=getSelection(); s.removeAllRanges(); s.addRange(r);
+  });
+  host.addEventListener("focusout",e=>{
+    const el=e.target.closest("[data-bind]"); if(el) inlineCommit(el);
+  });
+  host.addEventListener("keydown",e=>{
+    const el=e.target.closest("[data-bind]"); if(!el) return;
+    const multiline=$("#"+el.dataset.bind)?.tagName==="TEXTAREA";
+    if(e.key==="Enter" && !(multiline && e.shiftKey)){ e.preventDefault(); el.blur(); }
+    if(e.key==="Tab"){
+      // Al salir se redibuja la tarjeta; se enfoca el texto siguiente/anterior por posición.
+      e.preventDefault();
+      const sel="#pv-front [data-bind], #pv-back [data-bind]";
+      const i=[...$$(sel)].indexOf(el)+(e.shiftKey?-1:1);
+      el.blur();
+      const next=[...$$(sel)][i]; if(next) next.focus();
+    }
+    if(e.key==="Escape"){ e.preventDefault(); el.removeAttribute("data-bind"); el.blur(); render(); }
+  });
+  host.addEventListener("click",e=>{
+    const up=e.target.closest("[data-upload]");
+    if(up) $("#"+up.dataset.upload).click();
+    else if(e.target.closest(".photo")) $("#d-photo").click();
+  });
+});
+$$("#t-org,#t-title,#t-signname,#t-contact,#t-legend,#t-prefix,#d-name,#d-code,#d-cat,#d-extra,#t-valnum,#t-sealsize,#t-sealop,#t-orgsize,#t-titlesize")
+  .forEach(el=>el.addEventListener("input",render));
+$$("#t-band,#t-accent,#t-cardbg,#t-valunit,#d-issue,#t-sealsrc,#t-orgbold,#t-titlebold").forEach(el=>el.addEventListener("change",render));
+
+/* ---------- Plantilla persistente ---------- */
+function tplSnapshot(){return {...tpl(), img:{logo1:img.logo1,logo2:img.logo2,seal:img.seal,sign:img.sign}};}
+async function doSaveTpl(){
+  if(!db) return setStatus("No se puede guardar aquí: abre http://localhost:8787/ui/generador-carnets.html","bad");
+  await saveTplDB(tplSnapshot());
+  setStatus("Plantilla guardada.","ok");
+}
+// El diseño (textos, colores, logos, sello, firma) se guarda solo al cambiar y se
+// carga al abrir; antes vivía solo en memoria y se perdía al recargar la página.
+let tplReady=false, autosaveTimer=0;
+function scheduleAutosave(){
+  if(!db || !tplReady) return;
+  clearTimeout(autosaveTimer);
+  autosaveTimer=setTimeout(()=>{ saveTplDB(tplSnapshot()).catch(()=>{}); },600);
+}
+async function doLoadTpl(){
+  const s=await loadTplDB(); if(!s){setStatus("No hay plantilla guardada.","warn");return;}
+  applyTpl(s); setStatus("Plantilla cargada.","ok");
+}
+function applyTpl(s){
+  $("#t-org").value=s.org||""; $("#t-title").value=s.title||"";
+  $("#t-band").value=s.band||"#1e40af"; $("#t-accent").value=s.accent||"#1e40af";
+  $("#t-cardbg").value=s.cardbg||"#ffffff"; $("#t-signname").value=s.signname||"";
+  $("#t-contact").value=s.contact||""; $("#t-legend").value=s.legend||"";
+  $("#t-valnum").value=s.valnum||"1"; $("#t-valunit").value=s.valunit||"years";
+  $("#t-prefix").value=s.prefix||"";
+  $("#t-sealsize").value=s.sealsize||"80"; $("#t-sealop").value=s.sealop||"7";
+  $("#t-sealsrc").value=s.sealsrc||"seal";
+  $("#t-orgsize").value=s.orgsize||"12"; $("#t-orgbold").value=s.orgbold||"700";
+  $("#t-titlesize").value=s.titlesize||"9.5"; $("#t-titlebold").value=s.titlebold||"400";
+  if(s.img){["logo1","logo2","seal","sign"].forEach(k=>{
+    img[k]=s.img[k]||null;
+    const map={logo1:"th-logo1",logo2:"th-logo2",seal:"th-seal",sign:"th-sign"};
+    const el=$("#"+map[k]); if(el){if(img[k]){el.src=img[k];el.hidden=false}else{el.hidden=true}}
+  });}
+  render();
+}
+$("#save-tpl").addEventListener("click",doSaveTpl);
+$("#load-tpl").addEventListener("click",doLoadTpl);
+
+/* ---------- Estatus ---------- */
+function setStatus(msg,cls=""){const s=$("#status");s.textContent=msg;s.className="status "+cls;}
+
+/* ---------- Registro ---------- */
+function statusOf(c){
+  if(c.voided) return "anu";
+  const now=new Date().toISOString().slice(0,10);
+  return (c.data.expiry && c.data.expiry < now) ? "ven" : "vig";
+}
+function nextControl(list){
+  let max=0; list.forEach(c=>{const n=parseInt(String(c.control).replace(/\D/g,""),10);if(n>max)max=n;});
+  return "C-"+String(max+1).padStart(6,"0");
+}
+async function renderRegistry(){
+  const all=(await getAll()).sort((a,b)=>b.control.localeCompare(a.control));
+  const q=($("#reg-q").value||"").toLowerCase();
+  const rows=all.filter(c=>{
+    if(!q) return true;
+    return [c.control,c.data.name,c.data.ced,c.data.code,c.tpl.org].join(" ").toLowerCase().includes(q);
+  });
+  $("#reg-body").innerHTML=rows.map(c=>{
+    const st=statusOf(c);
+    const lbl={vig:"Vigente",ven:"Vencido",anu:"Anulado"}[st];
+    return `<tr>
+      <td>${esc(c.control)}</td>
+      <td>${esc(new Date(c.createdAt).toLocaleString('es-DO'))}</td>
+      <td>${esc(c.data.name)}</td><td>${esc(c.data.ced)}</td><td>${esc(c.data.code)}</td>
+      <td>${esc(c.data.cat)}</td><td>${esc(c.tpl.org)}</td>
+      <td>${fmtDate(c.data.issue)}</td><td>${fmtDate(c.data.expiry)}</td>
+      <td>${c.prints||1}</td>
+      <td><span class="badge ${st}">${lbl}</span></td>
+      <td>
+        <button class="btn sm" data-reprint="${esc(c.control)}">Reimprimir</button>
+        ${c.voided?"":`<button class="btn sm danger" data-void="${esc(c.control)}">Anular</button>`}
+      </td></tr>`;
+  }).join("") || `<tr><td colspan="12" style="color:var(--muted);text-align:center;padding:16px">Sin registros todavía.</td></tr>`;
+  const vig=all.filter(c=>statusOf(c)==="vig").length;
+  $("#stats").textContent=`${all.length} emitidos · ${vig} vigentes`;
+}
+
+/* ---------- Impresoras ---------- */
+const PRINTERS={
+  entrust:{
+    label:"ENTRUST · Sigma DS3",
+    mode:"cr80", bleed:true, rotate:false, ox:0, oy:0,
+    note:"En el diálogo de impresión elige <b>ENTRUST</b>, papel CR80, márgenes “Ninguno”, "+
+         "escala 100 % (o “Tamaño real”) y activa “Gráficos de fondo”. El programa manda el frente y el "+
+         "reverso como dos páginas CR80 seguidas; el driver las usa para el dúplex. "+
+         "El laminado, el panel UV y los elementos de seguridad se configuran en las Preferencias del "+
+         "driver de Entrust, no aquí."
+  },
+  zc300:{
+    label:"Zebra ZC300",
+    mode:"cr80", bleed:true, rotate:false, ox:0, oy:0,
+    note:"En el diálogo de impresión elige la <b>ZC300</b>, tamaño de tarjeta CR80, orientación "+
+         "horizontal, márgenes “Ninguno”, escala 100 % y “Gráficos de fondo”. "+
+         "La ZC300 imprime a 300 ppp (1006 × 640 px por cara) y hace borde a borde en CR80. "+
+         "Para imprimir las dos caras, el equipo necesita el volteador de tarjetas y hay que activar "+
+         "la impresión a doble cara en Preferencias del driver; sin volteador, imprime el frente, "+
+         "voltea la tarjeta a mano y manda el reverso. El panel negro (K) y la calidad se ajustan en el driver."
+  },
+  "zc300-api":{
+    label:"Zebra ZC300 (API)",
+    mode:"cr80", bleed:true, rotate:false, ox:0, oy:0,
+    canvas:{w:1006,h:640},   // ZC300: 1006 x 640 px a 300 ppp (ficha técnica)
+    api:{printer:"zebra-zc300", options:{back_type:"color", overlay_front:"true", overlay_back:"true"}},
+    note:"Imprime sin diálogo por el SDK de Zebra (USB directo): el navegador genera frente y reverso a 300 ppp "+
+         "(1006 × 640 px, tamaño nativo) y el middleware los manda a la ZC300 con overlay en ambas caras. Espera a que la "+
+         "tarjeta salga y avisa si la impresora reporta un error. Los desplazamientos X/Y y “Girar reverso” sí se aplican."
+  },
+  "entrust-api":{
+    label:"ENTRUST Sigma DS3 (API)",
+    mode:"cr80", bleed:true, rotate:false, ox:0, oy:0,
+    canvas:{w:1015,h:640},   // DS3: página física del driver a 300 ppp (incluye ~2 px de sangrado por lado)
+    api:{printer:"entrust-sigma-ds3", options:{print_mode:"custom", color_dpi:"300x300", mono_dpi:"300x600"}},
+    note:"Imprime sin diálogo por el SDK de Entrust: el navegador genera frente y reverso a 300 ppp "+
+         "(1015 × 640 px, tamaño nativo del driver) y el middleware los manda a la Sigma DS3 a doble cara. Espera a que la "+
+         "tarjeta salga (30-60 s) y avisa si la impresora reporta un error (sin tarjetas, cinta, atasco). "+
+         "Los desplazamientos X/Y y “Girar reverso” sí se aplican."
+  },
+  carta:{
+    label:"Hoja carta",
+    mode:"carta", bleed:false, rotate:false, ox:0, oy:0,
+    note:"Imprime el frente y el reverso en una hoja carta normal, con guías de corte. "+
+         "Úsalo para revisar el diseño o cuando no tengas a mano una impresora de tarjetas. "+
+         "Escala 100 % y “Gráficos de fondo” activados."
+  }
+};
+const CAL_KEY="carnet-calibracion-v1";
+function loadCal(){ try{return JSON.parse(localStorage.getItem(CAL_KEY))||{};}catch{return {};} }
+function saveCal(){
+  const all=loadCal(); const p=$("#printer").value;
+  all[p]={bleed:$("#opt-bleed").checked,rotate:$("#opt-rotate").checked,
+          ox:parseFloat($("#off-x").value||0),oy:parseFloat($("#off-y").value||0)};
+  try{localStorage.setItem(CAL_KEY,JSON.stringify(all));}catch{}
+}
+function applyPrinter(keepValues){
+  const p=$("#printer").value, def=PRINTERS[p], cal=loadCal()[p];
+  if(!keepValues){
+    const v=cal||def;
+    $("#opt-bleed").checked=!!v.bleed;
+    $("#opt-rotate").checked=!!v.rotate;
+    $("#off-x").value=v.ox||0;
+    $("#off-y").value=v.oy||0;
+  }
+  $("#printer-note").innerHTML=def.note+
+    (cal?' <span style="opacity:.75">· Calibración guardada para esta impresora.</span>':"");
+  try{localStorage.setItem("carnet-impresora",p);}catch{}
+}
+$("#printer").addEventListener("change",()=>applyPrinter(false));
+$$("#opt-bleed,#opt-rotate,#off-x,#off-y").forEach(el=>el.addEventListener("change",()=>{
+  saveCal(); applyPrinter(true);
+}));
+$("#cal-reset").addEventListener("click",()=>{
+  const all=loadCal(); delete all[$("#printer").value];
+  try{localStorage.setItem(CAL_KEY,JSON.stringify(all));}catch{}
+  applyPrinter(false); setStatus("Calibración restablecida para "+PRINTERS[$("#printer").value].label+".","ok");
+});
+$("#cal-test").addEventListener("click",()=>{
+  const ox=parseFloat($("#off-x").value||0), oy=parseFloat($("#off-y").value||0);
+  const p=PRINTERS[$("#printer").value];
+  const ticks=(horiz)=>{let s="";for(let i=5;i<(horiz?86:54);i+=5){
+    s+=horiz
+      ?`<div style="position:absolute;left:${i}mm;top:0;width:.2mm;height:${i%10?2:3.5}mm;background:#000"></div>`+
+        `<div style="position:absolute;left:${i}mm;bottom:0;width:.2mm;height:${i%10?2:3.5}mm;background:#000"></div>`
+      :`<div style="position:absolute;top:${i}mm;left:0;height:.2mm;width:${i%10?2:3.5}mm;background:#000"></div>`+
+        `<div style="position:absolute;top:${i}mm;right:0;height:.2mm;width:${i%10?2:3.5}mm;background:#000"></div>`;
+  } return s;};
+  const target=(cara)=>`<div style="width:85.6mm;height:54mm;position:relative;
+      transform:translate(${ox}mm,${oy}mm);box-sizing:border-box;
+      outline:.3mm solid #000;outline-offset:-.3mm;font:600 3mm/1 Arial,sans-serif;color:#000">
+      ${ticks(true)}${ticks(false)}
+      <div style="position:absolute;left:42.8mm;top:0;width:.2mm;height:54mm;background:#bbb"></div>
+      <div style="position:absolute;top:27mm;left:0;height:.2mm;width:85.6mm;background:#bbb"></div>
+      <div style="position:absolute;left:38.8mm;top:23mm;width:8mm;height:8mm;border:.3mm solid #000;border-radius:50%"></div>
+      <div style="position:absolute;left:5mm;top:5mm">${cara}</div>
+      <div style="position:absolute;right:5mm;top:5mm">${p.label}</div>
+      <div style="position:absolute;left:5mm;bottom:5mm">X ${ox} mm · Y ${oy} mm</div>
+      <div style="position:absolute;right:5mm;bottom:5mm">85.6 × 54 mm</div>
+    </div>`;
+  const rot=$("#opt-rotate").checked;
+  const back=rot?`<div style="transform:rotate(180deg)">${target("REVERSO")}</div>`:target("REVERSO");
+  $("#print-area").innerHTML = p.mode==="cr80"
+    ? `<div class="pg-cr80">${target("FRENTE")}</div><div class="pg-cr80">${back}</div>`
+    : `<div class="pg-carta"><div class="carta-card">${target("FRENTE")}</div><div class="carta-card">${back}</div></div>`;
+  window.print();
+  setStatus("Mide el borde impreso: si no cae en 85.6 × 54 mm, ajusta X e Y y repite.","ok");
+});
+
+/* ---------- Impresión vía middleware (API) ---------- */
+const API_W=1011, API_H=638;            // CR80 a 300 ppp
+const API_URL_KEY="carnet-api-url", API_KEY_KEY="carnet-api-key";
+function apiBase(){
+  return ($("#api-url").value.trim()||"").replace(/\/+$/,"");
+}
+function apiHeaders(){return {"X-API-Key":$("#api-key").value.trim()};}
+function loadApiCfg(){
+  let url="", key="";
+  try{url=localStorage.getItem(API_URL_KEY)||""; key=localStorage.getItem(API_KEY_KEY)||"";}catch{}
+  if(!url) url=location.protocol.startsWith("http")?location.origin:"http://localhost:8787";
+  $("#api-url").value=url; $("#api-key").value=key;
+}
+function saveApiCfg(){
+  try{localStorage.setItem(API_URL_KEY,$("#api-url").value.trim());
+      localStorage.setItem(API_KEY_KEY,$("#api-key").value.trim());}catch{}
+}
+$("#api-url").addEventListener("change",saveApiCfg);
+$("#api-key").addEventListener("change",saveApiCfg);
+$("#api-test").addEventListener("click",async()=>{
+  saveApiCfg();
+  try{
+    const r=await fetch(apiBase()+"/printers",{headers:apiHeaders()});
+    if(r.status===401) return setStatus("API key inválida.","bad");
+    if(!r.ok) return setStatus("El middleware respondió "+r.status+".","bad");
+    const list=await r.json();
+    setStatus("Conectado: "+list.map(p=>`${p.label} (${p.status})`).join(" · "),"ok");
+  }catch{setStatus("No se pudo conectar con "+apiBase()+" (¿está corriendo? ¿CORS?).","bad");}
+});
+
+// Cara → PNG 300 ppp al tamaño nativo de la impresora. SVG foreignObject: sin librerías,
+// fiel al CSS de la vista previa. La tarjeta CSS (342.4 × 216) se escala para cubrir el
+// lienzo (sangrado incluido) y se centra.
+// layer "color": todo menos los textos .kblack; layer "k": solo los .kblack en negro puro
+// sobre blanco, umbralizado a 1 bit (sin antialias) para que el driver los mande al panel K.
+const LAYER_CSS={
+  color:`.card .kblack{color:transparent!important}`,
+  k:`.card,.card *{background:transparent!important;border-color:transparent!important;
+       box-shadow:none!important;color:transparent!important;text-shadow:none!important}
+     .card img,.card .seal{visibility:hidden!important}
+     .card .kblack{color:#000!important}`
+};
+async function rasterizeFace(cardHTML,{rotate,ox,oy,w=API_W,h=API_H,layer="color"}){
+  const css=[...document.styleSheets].flatMap(s=>[...s.cssRules]).map(r=>r.cssText).join("\n");
+  const scale=Math.max(w/342.4,h/216);
+  const dx=(w-342.4*scale)/2, dy=(h-216*scale)/2;
+  const holder=document.createElement("div");
+  holder.setAttribute("style",`width:342.4px;height:216px;transform:translate(${dx}px,${dy}px) scale(${scale});
+    transform-origin:top left;--card-ink:#111418`);
+  holder.innerHTML=`<style>${css}\n${LAYER_CSS[layer]||""}</style>${cardHTML}`;
+  const xhtml=new XMLSerializer().serializeToString(holder);   // XHTML bien formado (<img/> etc.)
+  const svg=`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">`+
+    `<foreignObject width="100%" height="100%">${xhtml}</foreignObject></svg>`;
+  const image=new Image();
+  image.src="data:image/svg+xml;charset=utf-8,"+encodeURIComponent(svg);
+  await image.decode();
+  const c=document.createElement("canvas"); c.width=w; c.height=h;
+  const g=c.getContext("2d");
+  g.fillStyle="#fff"; g.fillRect(0,0,w,h);
+  const pxmm=300/25.4;
+  g.save();
+  if(rotate){g.translate(w/2,h/2); g.rotate(Math.PI); g.translate(-w/2,-h/2);}
+  g.translate(ox*pxmm,oy*pxmm);
+  g.drawImage(image,0,0,w,h);
+  g.restore();
+  if(layer==="k"){
+    const d=g.getImageData(0,0,w,h), px=d.data;
+    for(let i=0;i<px.length;i+=4){
+      const v=(0.299*px[i]+0.587*px[i+1]+0.114*px[i+2])<150?0:255;
+      px[i]=px[i+1]=px[i+2]=v; px[i+3]=255;
+    }
+    g.putImageData(d,0,0);
+  }
+  return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error("No se pudo generar la imagen")),"image/png"));
+}
+
+async function sendToApi(card){
+  const cfg=PRINTERS[$("#printer").value].api;
+  const rot=$("#opt-rotate").checked;
+  const ox=parseFloat($("#off-x").value||0), oy=parseFloat($("#off-y").value||0);
+  try{
+    setStatus("Generando imágenes y enviando al middleware…","warn");
+    const now={...img}; Object.assign(img, card.img||img);
+    const frontHTML=cardFrontHTML(card.tpl,card.data), backHTML=cardBackHTML(card.tpl,card.data);
+    Object.assign(img, now);
+    const {w,h}=PRINTERS[$("#printer").value].canvas||{w:API_W,h:API_H};
+    const face=(html,rotate,layer)=>rasterizeFace(html,{rotate,ox,oy,w,h,layer});
+    const [front,back,frontK,backK]=await Promise.all([
+      face(frontHTML,false,"color"), face(backHTML,rot,"color"),
+      face(frontHTML,false,"k"),     face(backHTML,rot,"k")]);
+    const fd=new FormData();
+    fd.append("printer_id",cfg.printer);
+    fd.append("front",front,"front.png"); fd.append("back",back,"back.png");
+    // Capa negra aparte (1 bit, mismo tamaño): el puente la imprime por el panel K
+    fd.append("front_k",frontK,"front_k.png"); fd.append("back_k",backK,"back_k.png");
+    // Solo opciones que el middleware permite para esa impresora (en Windows van vacías: se fijan en el driver)
+    let allowed={};
+    try{const ro=await fetch(apiBase()+"/printers/"+cfg.printer+"/options",{headers:apiHeaders()}); if(ro.ok) allowed=await ro.json();}catch{}
+    const opts=Object.fromEntries(Object.entries(cfg.options||{}).filter(([k,v])=>
+      k in allowed && (!allowed[k].length || allowed[k].includes(v))));
+    if($("#opt-split")?.checked && allowed.split_ribbon) opts.split_ribbon="ymct_k";
+    fd.append("options",JSON.stringify(opts));
+    const r=await fetch(apiBase()+"/jobs",{method:"POST",headers:apiHeaders(),body:fd});
+    if(r.status===401) return setStatus("API key inválida (abre “Conexión al middleware”).","bad");
+    if(!r.ok){const e=await r.json().catch(()=>({})); return setStatus("Error del middleware: "+(e.detail||r.status),"bad");}
+    let job=await r.json();
+    const label=PRINTERS[$("#printer").value].label, t0=Date.now();
+    // Con SDK (Entrust) el trabajo sigue en cola hasta que la tarjeta sale: 30-60 s por carnet.
+    while(job.state==="queued" && Date.now()-t0<6*60*1000){
+      setStatus(`Imprimiendo en ${label}… ${Math.round((Date.now()-t0)/1000)} s`,"warn");
+      await new Promise(ok=>setTimeout(ok,1000));
+      job=await (await fetch(apiBase()+"/jobs/"+job.id,{headers:apiHeaders()})).json();
+    }
+    if(job.state==="failed") return setStatus("La impresión falló: "+(job.error||"error"),"bad");
+    if(job.state==="queued") return setStatus(`Sigue en cola en ${label} tras 6 min: revisa la impresora.`,"bad");
+    clearDraft();   // impreso: el borrador ya no hace falta
+    setStatus(job.state==="printed"
+      ? `Impreso en ${label} (trabajo ${job.backend_job_id||job.id}).`
+      : `Enviado a ${label} (trabajo ${job.backend_job_id||job.id}).`,"ok");
+  }catch(err){
+    setStatus("No se pudo imprimir por API: "+(err&&err.message||err),"bad");
+  }
+}
+
+/* ---------- Impresión ---------- */
+function buildPrint(card){
+  if(PRINTERS[$("#printer").value].api) return sendToApi(card);
+  const mode=PRINTERS[$("#printer").value].mode;
+  const bleed=$("#opt-bleed").checked, rot=$("#opt-rotate").checked;
+  const ox=parseFloat($("#off-x").value||0), oy=parseFloat($("#off-y").value||0);
+  const t=card.tpl, d=card.data;
+  // reinyectar imágenes del carnet guardado
+  const saved=img, now={...img};
+  Object.assign(img, card.img||img);
+  const front=cardFrontHTML(t,d), back=cardBackHTML(t,d);
+  Object.assign(img, now);
+  const shift=`transform:translate(${ox}mm,${oy}mm)`;
+  const scaleFront=`<div style="width:85.6mm;height:54mm;${shift}">${scaleWrap(front)}</div>`;
+  const backInner=rot?`<div style="transform:rotate(180deg);width:85.6mm;height:54mm">${scaleWrap(back)}</div>`:scaleWrap(back);
+  const scaleBack=`<div style="width:85.6mm;height:54mm;${shift}">${backInner}</div>`;
+  let html="";
+  if(mode==="cr80"){
+    html=`<div class="pg-cr80">${scaleFront}</div><div class="pg-cr80">${scaleBack}</div>`;
+  }else{
+    html=`<div class="pg-carta"><div class="carta-card">${scaleFront}</div><div class="carta-card">${scaleBack}</div></div>`;
+  }
+  $("#print-area").innerHTML=html;
+  window.print();
+}
+// preview usa 4px/mm (342.4px); impresión usa mm reales → escala 25% * (10/4)... usamos transform scale
+function scaleWrap(innerCardHTML){
+  // La tarjeta interna mide 342.4px x 216px (4px/mm). 85.6mm = 342.4px → factor 0.25mm/px.
+  return `<div style="width:342.4px;height:216px;transform:scale(0.25);transform-origin:top left">${innerCardHTML}</div>`;
+}
+
+/* ---------- Generar ---------- */
+async function generate(register){
+  const d=data(), t=tpl();
+  if(!d.name.trim()){setStatus("Falta el nombre del titular.","bad");return;}
+  if(digits(d.ced).length===11 && !validCed(d.ced)){
+    if(!confirm("La cédula no pasa el dígito verificador. ¿Generar de todos modos?")) return;
+  }
+  const all=await getAll();
+  // código automático
+  if(!d.code.trim()){
+    const ctrl=nextControl(all);
+    d.code=(t.prefix||"")+ctrl.replace("C-","");
+    $("#d-code").value=d.code;
+  }
+  render();
+  let card;
+  if(register){
+    // aviso si ya hay carnet vigente con esa cédula
+    const existing=all.find(c=>digits(c.data.ced)===digits(d.ced) && statusOf(c)==="vig");
+    if(existing && !confirm(`La cédula ${d.ced} ya tiene un carnet vigente (${existing.control}). ¿Emitir otro?`)) return;
+    const control=nextControl(all);
+    card={control,createdAt:Date.now(),prints:1,voided:false,
+      tpl:t,data:d,img:{logo1:img.logo1,logo2:img.logo2,seal:img.seal,sign:img.sign,photo:img.photo}};
+    await putCard(card);
+    setStatus(`Carnet ${control} registrado.`,"ok");
+    await renderRegistry();
+  }else{
+    card={control:"—",tpl:t,data:d,img:{...img}};
+    setStatus("Impresión sin registrar.","warn");
+  }
+  buildPrint(card);
+}
+$("#generate").addEventListener("click",()=>generate(true));
+$("#preview-print").addEventListener("click",()=>generate(false));
+
+/* reimprimir / anular / buscar */
+$("#reg-body").addEventListener("click",async e=>{
+  const rp=e.target.dataset.reprint, vd=e.target.dataset.void;
+  if(rp){
+    const all=await getAll(); const c=all.find(x=>x.control===rp);
+    if(c){c.prints=(c.prints||1)+1; await putCard(c); await renderRegistry(); buildPrint(c);}
+  }
+  if(vd){
+    if(!confirm(`¿Anular el carnet ${vd}? No se podrá revertir.`)) return;
+    const all=await getAll(); const c=all.find(x=>x.control===vd);
+    if(c){c.voided=true; await putCard(c); await renderRegistry();}
+  }
+});
+$("#reg-q").addEventListener("input",renderRegistry);
+
+/* ---------- Buscar por cédula y precargar ---------- */
+async function lookup(ced){
+  const all=await getAll();
+  const matches=all.filter(c=>digits(c.data.ced)===digits(ced)).sort((a,b)=>b.control.localeCompare(a.control));
+  if(!matches.length){setStatus("No hay carnet registrado con esa cédula.","warn");return;}
+  const c=matches[0], d=c.data, t=c.tpl;
+  $("#d-name").value=d.name; $("#d-ced").value=d.ced; $("#d-code").value=d.code;
+  $("#d-cat").value=d.cat; $("#d-extra").value=d.extra||""; $("#d-issue").value=d.issue;
+  // plantilla e imágenes del carnet
+  $("#t-org").value=t.org; $("#t-title").value=t.title; $("#t-band").value=t.band;
+  $("#t-accent").value=t.accent; $("#t-cardbg").value=t.cardbg; $("#t-signname").value=t.signname;
+  $("#t-contact").value=t.contact; $("#t-legend").value=t.legend;
+  $("#t-valnum").value=t.valnum; $("#t-valunit").value=t.valunit; $("#t-prefix").value=t.prefix||"";
+  $("#t-sealsize").value=t.sealsize||"80"; $("#t-sealop").value=t.sealop||"7"; $("#t-sealsrc").value=t.sealsrc||"seal";
+  $("#t-orgsize").value=t.orgsize||"12"; $("#t-orgbold").value=t.orgbold||"700";
+  $("#t-titlesize").value=t.titlesize||"9.5"; $("#t-titlebold").value=t.titlebold||"400";
+  if(c.img){Object.keys(img).forEach(k=>{
+    img[k]=c.img[k]||null;
+    const map={logo1:"th-logo1",logo2:"th-logo2",seal:"th-seal",sign:"th-sign",photo:"th-photo"};
+    const el=$("#"+map[k]); if(el){if(img[k]){el.src=img[k];el.hidden=false}else{el.hidden=true}}
+  });}
+  render(); setStatus(`Datos de ${c.control} cargados.`,"ok");
+}
+$("#lookup-btn").addEventListener("click",()=>lookup($("#lookup-ced").value));
+$("#clear-titular").addEventListener("click",()=>{ clearTitular(); setStatus("Titular limpio.","ok"); });
+$("#lookup-ced").addEventListener("input",e=>e.target.value=fmtCed(e.target.value));
+
+/* ---------- Export / import ---------- */
+$("#exp-csv").addEventListener("click",async()=>{
+  const all=(await getAll()).sort((a,b)=>a.control.localeCompare(b.control));
+  const head=["Control","Generado","Titular","Cedula","Codigo","Categoria","Organizacion","Emision","Expira","Impresiones","Estado"];
+  const lines=all.map(c=>{
+    const st={vig:"Vigente",ven:"Vencido",anu:"Anulado"}[statusOf(c)];
+    return [c.control,new Date(c.createdAt).toISOString(),c.data.name,c.data.ced,c.data.code,
+      c.data.cat,c.tpl.org,c.data.issue,c.data.expiry,c.prints||1,st]
+      .map(v=>`"${String(v??"").replace(/"/g,'""')}"`).join(",");
+  });
+  download("registro-carnets.csv","text/csv",[head.join(","),...lines].join("\n"));
+});
+$("#exp-json").addEventListener("click",async()=>{
+  const all=await getAll();
+  download("respaldo-carnets.json","application/json",JSON.stringify({version:1,cards:all},null,2));
+});
+$("#imp-json").addEventListener("change",async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  const fr=new FileReader();
+  fr.onload=async()=>{
+    try{
+      const obj=JSON.parse(fr.result); const cards=obj.cards||obj;
+      if(!Array.isArray(cards)) throw 0;
+      for(const c of cards) await putCard(c);
+      await renderRegistry(); setStatus(`Restaurados ${cards.length} registros.`,"ok");
+    }catch{setStatus("Archivo de respaldo no válido.","bad");}
+  };
+  fr.readAsText(f);
+});
+function download(name,type,content){
+  const blob=new Blob([content],{type}); const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download=name; a.click();
+  URL.revokeObjectURL(url);
+}
+
+/* ---------- Init ---------- */
+(async()=>{
+  try{
+    const last=localStorage.getItem("carnet-impresora");
+    if(last && PRINTERS[last]) $("#printer").value=last;
+  }catch{}
+  loadApiCfg();
+  applyPrinter(false);
+  if(restoreDraft()) setStatus("Se recuperó el borrador del titular sin imprimir.","ok");
+  // La tarjeta se dibuja aunque el registro (IndexedDB) no esté disponible,
+  // p. ej. si el archivo se abre como data: o en una ventana privada.
+  render();
+  try{
+    await openDB();
+    const saved=await loadTplDB(); if(saved) applyTpl(saved);
+    tplReady=true;
+    await renderRegistry();
+  }
+  catch{ setStatus("Registro no disponible en este navegador: ábrelo desde http://localhost:8787/ui/ para guardar carnets.","warn"); }
+})();
+})();
+</script>
+</body>
+</html>

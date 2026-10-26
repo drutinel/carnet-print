@@ -1,0 +1,36 @@
+# Windows: copiar a printers.yaml. `printer_name` = nombre EXACTO en "Impresoras y escáneres"
+# (PowerShell: Get-Printer | Select Name).
+printers:
+  # SDK Link-OS de Zebra (bridge/zbin/ZebraBridge.exe): USB directo, sin spooler.
+  # Frente a color + overlay; reverso color/negro/nada. "printed" cuando la impresora da done_ok.
+  # (Alternativa sin SDK: adapter: windows + SumatraPDF, opciones en Preferencias de impresión.)
+  - id: zebra-zc300
+    label: Zebra ZC300
+    adapter: zebra-sdk
+    printer_name: "Zebra ZC300 USB Card Printer"   # informativo; la conexión es USB directa
+    allowed_options:
+      back_type: ["color", "mono", "none"]
+      overlay_front: ["true", "false"]
+      overlay_back: ["true", "false"]
+      source: ["feeder", "internal", "atm"]
+
+  # SDK de Entrust (bridge/bin/CardBridge.exe; compilar con bridge\build.ps1).
+  # Opciones por trabajo vía Print Ticket; el trabajo queda "printed" cuando la tarjeta sale.
+  - id: entrust-sigma-ds3
+    label: Entrust Sigma DS3
+    adapter: entrust-sdk
+    printer_name: "XPS Card Printer"
+    allowed_options:
+      rotate_front: ["true", "false"]      # girar 180° el frente
+      rotate_back: ["true", "false"]       # girar 180° el reverso
+      topcoat_front: ["all", "chip", "mag2", "mag3", "magjis"]
+      topcoat_back: ["all", "chip", "mag2", "mag3", "magjis"]
+      disable_printing: ["off", "front", "back", "all"]
+      hopper: ["1", "2", "3", "4", "5", "6"]
+      # Calidad (guía Entrust Sigma): custom fija dpi; 300x600 / 300x1200 mejoran texto fino
+      print_mode: ["standard", "best", "custom"]
+      color_dpi: ["300x300", "300x600"]
+      mono_dpi: ["300x300", "300x600", "300x1200"]
+      color_mode: ["icc", "vivid"]
+      # Split ribbon: una tanda de paneles para ambas caras (reverso solo negro K)
+      split_ribbon: ["ymct_k", "ymc_kt"]

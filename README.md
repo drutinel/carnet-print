@@ -1,0 +1,53 @@
+# Card Print Middleware
+
+API HTTP en Linux (FastAPI) que recibe un PDF de carnet desde la webapp y lo imprime en
+**Zebra ZC300** y **Entrust Sigma DS3** vía CUPS.
+
+```
+Webapp ──HTTPS──▶ (reverse proxy) ──▶ FastAPI :8080 ──▶ cola serial por impresora ──▶ lp ──▶ CUPS ──▶ impresora
+```
+
+## Uso
+
+```bash
+python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
+cp .env.example .env && cp printers.example.yaml printers.yaml   # editar
+.venv/bin/uvicorn app.main:create_app --factory --port 8080
+.venv/bin/pytest
+```
+
+| Endpoint | Descripción |
+|---|---|
+| `GET /health` | Público |
+| `GET /printers` | Impresoras y estado (`ready`/`offline`/`unknown`) |
+| `POST /jobs` | multipart: `printer_id`, `pdf` **o** `front`+`back` (PNG 300 ppp, el middleware arma el PDF CR80), `copies` (1-10), `options` (JSON). Devuelve 202 + job |
+| `GET /printers/{id}/options` | Opciones CUPS permitidas por impresora |
+| `GET /jobs/{id}` | `queued` → `submitted` / `failed` |
+
+Todos (salvo `/health`) requieren header `X-API-Key`. Pág. 1 del PDF = frente, pág. 2 = reverso.
+Estado `submitted` = aceptado por CUPS, no "carnet impreso" (ver pendientes).
+
+## UI (generador de carnets)
+
+`web/generador-carnets.html` se sirve en `http://localhost:8080/ui/generador-carnets.html`. Las impresoras
+“vía middleware (API)” rasterizan frente/reverso en el navegador (1011×638 px) y las envían a `POST /jobs`.
+La URL y la API key se guardan en `localStorage` (panel “Conexión al middleware”).
+
+## Estado de verificación
+
+- **Zebra ZC300 (verificado, macOS):** driver Mac 1.0.10.0 de Zebra instalado, cola CUPS `Zebra_ZC300`
+  por USB, tarjeta de prueba de 2 páginas impresa vía `POST /jobs`, y tarjeta real impresa desde el generador
+  (`/ui/generador-carnets.html`, impresora “ZC300 vía API”). Opciones tomadas del PPD oficial
+  (ver `printers.example.yaml`). El driver Linux de Zebra (DZCG.1.0.0.0, 2018) **no** está probado.
+- **Entrust Sigma DS3 (sin verificar):** hay driver Linux "LXM" (CUPS) según Entrust, pero no se pudo
+  descargar ni probar; el driver XPS es solo Windows. Falta conectar la impresora y obtener el driver.
+- **Overlay con bitmap / paneles de seguridad:** se configuran en la app de Zebra, no por opciones CUPS;
+  por CUPS solo se elige `RibbonName`/`RibbonCombination` (p. ej. `15Hologram`). Probar con la cinta puesta.
+
+## Pendientes / siguiente paso
+
+- Confirmar finalización real del trabajo (hoy `submitted` = CUPS lo aceptó): polling con `lpstat`.
+- Probar cinta Hologram y cinta de seguridad con tarjeta real.
+- Obtener y probar el driver del DS3.
+- Si la webapp está en otro dominio: HTTPS delante (nginx/caddy) y `CARDPRINT_CORS_ORIGINS`.
+- Servicio systemd: `deploy/cardprint.service`.
