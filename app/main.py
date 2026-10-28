@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import Body, Request, Depends, FastAPI, File, Form, Header, HTTPException, Path as PathParam, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -25,6 +25,7 @@ from .store import NotFound, Store, StoreError
 WEB_DIR = resource_dir() / "web"
 MAX_COPIES = 10
 LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+LOCAL_HOSTNAMES = {"localhost", "127.0.0.1", "::1"}
 # Campos del titular que un perfil de cliente puede dejar editables
 KIOSK_FIELDS = {"name", "ced", "cat", "extra", "code", "issue", "photo"}
 # id de plantilla / número de control: se usan como clave en el JSON y en la URL
@@ -249,22 +250,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def delete_client(client_id: ItemId) -> None:
         store_call(store.delete_client, client_id)
 
-    @app.get("/c/{client_id}", response_class=HTMLResponse)
-    def kiosk_page(client_id: ItemId, request: Request) -> HTMLResponse:
-        """El generador ya configurado para un cliente: plantilla fija y solo sus campos editables.
+    def is_local(request: Request) -> bool:
+        """Navegador en esta misma PC. También se mira el Host: con DNS rebinding una web ajena
+        llega por loopback pero con otro nombre de host."""
+        peer = request.client.host if request.client else ""
+        return peer in LOOPBACK and request.url.hostname in LOCAL_HOSTNAMES
 
-        La API key solo se incrusta si el navegador está en la misma PC (loopback); desde otra
-        máquina la página la pide.
+    def render_page(request: Request, kiosk: dict | None = None) -> HTMLResponse:
+        """El generador con `window.BOOT` (y `window.KIOSK` en modo kiosko) ya incrustados.
+
+        La API key solo se incrusta si el navegador está en esta PC: así la web abierta por el
+        programa funciona sin pegar la clave; desde otra máquina la página la pide.
         """
-        client = store_call(store.get_client, client_id)
-        host = request.client.host if request.client else ""
-        kiosk = {"id": client_id, **client, "api_key": settings.api_key if host in LOOPBACK else ""}
+        key = settings.api_key if is_local(request) else ""
+        boot = {"api_key": key}
+        if kiosk is not None:
+            kiosk = {**kiosk, "api_key": key}
+        data = "window.BOOT=" + json.dumps(boot) + (";window.KIOSK=" + json.dumps(kiosk) if kiosk else "")
+        inject = "<script>" + data.replace("</", "<\\/") + "</script>\n"
         page = (WEB_DIR / "generador-carnets.html").read_text(encoding="utf-8")
-        inject = "<script>window.KIOSK=" + json.dumps(kiosk).replace("</", "<\\/") + "</script>\n"
         return HTMLResponse(
             page.replace("<script>\n(() => {", inject + "<script>\n(() => {", 1),
             headers={"Cache-Control": "no-store"},
         )
+
+    @app.get("/c/{client_id}", response_class=HTMLResponse)
+    def kiosk_page(client_id: ItemId, request: Request) -> HTMLResponse:
+        """El generador ya configurado para un cliente: plantilla fija y solo sus campos editables."""
+        client = store_call(store.get_client, client_id)
+        return render_page(request, {"id": client_id, **client})
+
+    @app.get("/ui/generador-carnets.html", response_class=HTMLResponse, include_in_schema=False)
+    def admin_page(request: Request) -> HTMLResponse:
+        return render_page(request)
+
+    @app.get("/favicon.ico", include_in_schema=False)
+    def favicon() -> Response:
+        return Response(status_code=204)
 
     @app.get("/settings", dependencies=[Depends(require_key)])
     def get_settings() -> dict:

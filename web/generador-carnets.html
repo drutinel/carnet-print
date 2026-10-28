@@ -33,7 +33,10 @@
   .banner a{color:#93c5fd}
   :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
   .btn:disabled{opacity:.5;cursor:not-allowed}
-  .sticky{position:sticky;top:64px;align-self:start}
+  .top{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+  .sticky{position:sticky;top:64px}
+  /* Pantalla corta o angosta: la vista previa (dos tarjetas) no cabe fija; se desplaza con la página */
+  @media (max-height:860px){.sticky{position:static}}
   .actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
   .actions .primary{flex:1 1 220px;padding:12px 16px;font-size:14px}
   details.panel>summary{list-style:none;cursor:pointer;margin:0;padding:12px 14px;font-size:13px;
@@ -186,7 +189,7 @@
 
   /* ---- Impresión ---- */
   body.kiosk .admin-only{display:none!important}
-  @media (max-width:860px){.wrap{grid-template-columns:1fr}.sticky{position:static}}
+  @media (max-width:860px){.wrap,.top{grid-template-columns:1fr}.sticky{position:static}}
 </style>
 </head>
 <body>
@@ -204,6 +207,9 @@
 <div id="preflight" class="banner" role="alert" hidden></div>
 
 <main class="wrap">
+
+  <!-- Fila superior: el sticky de la vista previa solo se mueve dentro de este contenedor -->
+  <div class="top full">
 
   <!-- 1. Vista previa: se edita directo sobre la tarjeta -->
   <section class="panel sticky" aria-labelledby="h-prev">
@@ -253,6 +259,8 @@
       <div class="status" id="status" role="status" aria-live="polite"></div>
     </div>
   </section>
+
+  </div>
 
   <!-- 3. Registro -->
   <section class="panel full" id="registry" aria-labelledby="h-reg">
@@ -956,7 +964,10 @@ async function refreshPrinterChip(){
     const txt={ready:"lista",offline:"sin conexión",unknown:"estado desconocido"};
     chip.textContent=p?`${p.label}: ${txt[p.status]||p.status}`:"Sin impresora configurada (printers.yaml)";
     chip.dataset.state=p?p.status:"bad";
-  }catch(e){ chip.textContent="Sin conexión con el middleware"; chip.dataset.state="bad"; }
+  }catch(e){
+    chip.textContent=/API key/.test(e.message)?"API key inválida: pégala en Avanzado":"Sin conexión con el middleware";
+    chip.dataset.state="bad";
+  }
 }
 setInterval(()=>{ if(!busy && !document.hidden) refreshPrinterChip(); },30000);
 
@@ -970,6 +981,8 @@ function loadApiCfg(){
   let url="", key="";
   try{url=localStorage.getItem(API_URL_KEY)||""; key=localStorage.getItem(API_KEY_KEY)||"";}catch{}
   if(!url) url=location.protocol.startsWith("http")?location.origin:"http://localhost:8787";
+  const BOOT=window.BOOT||{};
+  if(BOOT.api_key) key=BOOT.api_key;      // abierta desde la PC del programa: ya viene la clave vigente
   if(KIOSK){ key=KIOSK.api_key||key; url=location.origin; }   // el kiosko no guarda la clave en el navegador
   $("#api-url").value=url; $("#api-key").value=key;
 }

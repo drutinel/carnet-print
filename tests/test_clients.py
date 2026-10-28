@@ -70,7 +70,7 @@ def test_kiosk_page_is_preconfigured_and_hides_key_from_other_machines(client):
 
 
 def test_kiosk_page_gets_key_on_loopback(app):
-    with TestClient(app, client=("127.0.0.1", 50000)) as c:
+    with TestClient(app, base_url="http://localhost", client=("127.0.0.1", 50000)) as c:
         c.put("/templates/acme", json={"org": "ACME"}, headers=KEY)
         _put(c)
         kiosk = json.loads(c.get("/c/acme-sa").text.split("window.KIOSK=")[1].split("</script>")[0])
@@ -97,3 +97,26 @@ def test_control_cannot_escape_the_png_folder(client, tmp_path):
     assert res.status_code == 202
     assert (tmp_path / "png" / res.json()["png_dir"]).is_dir()
     assert not (tmp_path.parent / "evil").exists()
+
+
+def _boot(res):
+    return json.loads(res.text.split("window.BOOT=")[1].split("</script>")[0].split(";window.KIOSK=")[0])
+
+
+def test_admin_page_gets_key_only_for_this_pc(app):
+    with TestClient(app, base_url="http://localhost", client=("127.0.0.1", 50000)) as local:
+        res = local.get("/ui/generador-carnets.html")
+        assert _boot(res) == {"api_key": "secret"} and res.headers["cache-control"] == "no-store"
+    with TestClient(app, client=("192.168.1.20", 50000)) as lan:  # otra máquina
+        assert _boot(lan.get("/ui/generador-carnets.html")) == {"api_key": ""}
+
+
+def test_key_is_not_given_when_host_header_is_not_local(app):
+    # DNS rebinding: llega por loopback pero con el nombre de otro sitio
+    with TestClient(app, base_url="http://evil.example", client=("127.0.0.1", 50000)) as c:
+        assert _boot(c.get("/ui/generador-carnets.html")) == {"api_key": ""}
+
+
+def test_favicon_does_not_404(app):
+    with TestClient(app) as c:
+        assert c.get("/favicon.ico").status_code == 204
