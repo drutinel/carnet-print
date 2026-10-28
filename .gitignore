@@ -31,3 +31,8 @@ images/
 # Software y documentación de terceros: se descarga, no se redistribuye
 windows-drivers/
 docs/*.pdf
+
+# Firmas, fotos y vectores de personas: NUNCA van al repo (es público)
+*.svg
+firma*
+foto-*
