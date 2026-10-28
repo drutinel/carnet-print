@@ -56,7 +56,7 @@ def test_health_is_public(client):
 
 
 def test_requires_api_key(client):
-    for url in ("/printers", "/templates", "/cards"):
+    for url in ("/printers", "/templates", "/cards", "/settings"):
         assert client.get(url).status_code == 401
     assert _post(client, headers={}).status_code == 401
 
@@ -163,6 +163,15 @@ def test_cards_persist_in_json_file(client, tmp_path):
     assert client.get("/cards", headers=KEY).json() == [card | {"prints": 2}]
     on_disk = json.loads((tmp_path / "carnets.json").read_text(encoding="utf-8"))
     assert list(on_disk["cards"]) == ["C-000001"]
+
+
+def test_settings_persist_in_json_file(client, tmp_path):
+    assert client.get("/settings", headers=KEY).json() == {}
+    cfg = {"printer": "entrust-api", "cal": {"entrust-api": {"ox": 0.4, "oy": -0.2}}}
+    assert client.put("/settings", json=cfg, headers=KEY).json() == cfg
+    assert client.put("/settings", json={"printer": "carta"}, headers=KEY).status_code == 200
+    assert client.get("/settings", headers=KEY).json() == {"printer": "carta"}  # reemplaza, no mezcla
+    assert json.loads((tmp_path / "settings.json").read_text(encoding="utf-8")) == {"printer": "carta"}
 
 
 def test_corrupt_json_is_reported_not_overwritten(client, tmp_path):

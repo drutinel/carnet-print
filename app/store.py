@@ -54,6 +54,7 @@ class Store:
             data_dir / "templates.json", {"active": None, "templates": {}}
         )
         self._cards = JsonFile(data_dir / "carnets.json", {"cards": {}})
+        self._settings = JsonFile(data_dir / "settings.json", {})
 
     # --- plantillas ---
     def list_templates(self) -> dict:
@@ -113,3 +114,14 @@ class Store:
 
         self._cards.update(mutate)
         return body
+
+    # --- ajustes de la UI (impresora, desplazamientos, calidad...): settings.json ---
+    def get_settings(self) -> dict:
+        return self._settings.read()
+
+    def put_settings(self, body: dict) -> dict:
+        def mutate(data: dict) -> None:
+            data.clear()
+            data.update(body)
+
+        return self._settings.update(mutate)

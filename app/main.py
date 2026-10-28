@@ -183,6 +183,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store_call(store.activate_template, template_id)
         return store.list_templates()
 
+    @app.get("/settings", dependencies=[Depends(require_key)])
+    def get_settings() -> dict:
+        return store_call(store.get_settings)
+
+    @app.put("/settings", dependencies=[Depends(require_key)])
+    def put_settings(body: dict = Body(...)) -> dict:
+        return store_call(store.put_settings, body)
+
     @app.get("/cards", dependencies=[Depends(require_key)])
     def list_cards() -> list[dict]:
         return store_call(store.list_cards)
