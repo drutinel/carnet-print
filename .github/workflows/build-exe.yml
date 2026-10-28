@@ -1,0 +1,113 @@
+name: Build CarnetPrint.exe
+
+# Compila CarnetPrint.exe (+ bridge\) en un Windows real. PyInstaller no compila para otro sistema.
+#  - Manual:      Actions > Build CarnetPrint.exe > Run workflow  (el resultado queda como artefacto)
+#  - Pull request a main: compila y prueba, sin publicar
+#  - Etiqueta v*:  además publica un Release con el .exe y el zip   (git tag v1.0.0 && git push origin v1.0.0)
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-exe-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+
+      - name: Tests
+        shell: pwsh
+        run: |
+          python -m pip install -e ".[dev]"
+          python -m pytest -q
+
+      - name: Compilar (puente .NET + PyInstaller)
+        shell: pwsh
+        run: ./build-exe.ps1
+
+      - name: Probar que el .exe arranca y sirve la web
+        shell: pwsh
+        run: |
+          $dir = Join-Path $env:RUNNER_TEMP "smoke"
+          New-Item -ItemType Directory $dir | Out-Null
+          Copy-Item dist\* $dir -Recurse
+          $env:CARDPRINT_OPEN_BROWSER = "false"
+          $p = Start-Process (Join-Path $dir "CarnetPrint.exe") -WorkingDirectory $dir -PassThru `
+                 -RedirectStandardOutput (Join-Path $dir "out.log") -RedirectStandardError (Join-Path $dir "err.log")
+          try {
+            $ok = $false
+            foreach ($i in 1..30) {
+              Start-Sleep -Seconds 1
+              try { if ((Invoke-WebRequest http://127.0.0.1:8787/health -UseBasicParsing).StatusCode -eq 200) { $ok = $true; break } } catch {}
+            }
+            if (-not $ok) { throw "CarnetPrint.exe no respondió en /health" }
+            $ui = Invoke-WebRequest http://127.0.0.1:8787/ui/generador-carnets.html -UseBasicParsing
+            if ($ui.StatusCode -ne 200 -or $ui.Content -notmatch "Generador de carnets") { throw "La web no va dentro del .exe" }
+            foreach ($f in ".env", "printers.yaml") {
+              if (-not (Test-Path (Join-Path $dir $f))) { throw "No se creó $f junto al .exe" }
+            }
+            Write-Host "OK: /health, la web y los archivos de la primera ejecución"
+          } finally {
+            taskkill /F /T /PID $p.Id | Out-Null   # el .exe de PyInstaller lanza un proceso hijo
+            Get-Content (Join-Path $dir "out.log"), (Join-Path $dir "err.log") -ErrorAction SilentlyContinue
+          }
+
+      - name: Armar el zip
+        shell: pwsh
+        run: |
+          $name = "CarnetPrint-${{ github.ref_type == 'tag' && github.ref_name || github.sha }}-win-x64"
+          Compress-Archive -Path dist\CarnetPrint.exe, dist\bridge -DestinationPath "$name.zip"
+          "ZIP_NAME=$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CarnetPrint-win-x64
+          path: ${{ env.ZIP_NAME }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CarnetPrint.exe
+          path: dist/CarnetPrint.exe
+          if-no-files-found: error
+          retention-days: 30
+
+  release:
+    # Solo con etiquetas v*: publica el .exe y el zip que armó el job anterior
+    if: github.ref_type == 'tag'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Crear el Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          gh release create "${{ github.ref_name }}" artifacts/CarnetPrint-win-x64/*.zip artifacts/CarnetPrint.exe/CarnetPrint.exe \
+            --title "${{ github.ref_name }}" --generate-notes

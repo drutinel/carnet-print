@@ -79,6 +79,19 @@ powershell -ExecutionPolicy Bypass -File build-exe.ps1   # necesita Python 3.11+
 
 Genera `dist\CarnetPrint.exe` y `dist\bridge\`.
 
+### Compilar con GitHub Actions (sin PC Windows)
+
+`.github/workflows/build-exe.yml` corre en un Windows de GitHub: pasa los tests, compila el puente y el `.exe`,
+**arranca el `.exe` y comprueba que sirve la web y crea sus archivos**, y sube el resultado.
+
+- **Manual:** *Actions > Build CarnetPrint.exe > Run workflow*. Al terminar, el zip (`CarnetPrint.exe` + `bridge\`) y el
+  `.exe` suelto quedan como artefactos durante 30 días.
+- **Release:** `git tag v1.0.0 && git push origin v1.0.0` publica un Release con el zip y el `.exe`.
+- **Pull requests a `main`:** compilan y prueban, sin publicar.
+
+Los minutos los paga el dueño del repo (gratis si es público). El build no prueba la impresión: eso requiere la DS3
+y el driver XPS en la PC.
+
 ## Documentación
 
 - Entrust: [guía del driver XPS 8.8](https://www.entrust.com/sites/default/files/documentation/productsupport/527280-005l-xps-card-printer-driver-8-8.pdf) ·
