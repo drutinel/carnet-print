@@ -1,92 +1,94 @@
-# Card Print Middleware
+# CarnetPrint
 
-API HTTP en Linux (FastAPI) que recibe un PDF de carnet desde la webapp y lo imprime en
-**Zebra ZC300** y **Entrust Sigma DS3** vía CUPS.
+Generador e impresor de carnets (CR80, frente y reverso) para la **Entrust Sigma DS3**. Un solo
+`CarnetPrint.exe` levanta la web de captura, imprime **directo** por el SDK de Entrust (sin PDF y sin
+diálogo de impresión) y guarda plantillas, carnets generados y PNG junto a sí mismo.
 
-```
-Webapp ──HTTPS──▶ (reverse proxy) ──▶ FastAPI :8080 ──▶ cola serial por impresora ──▶ lp ──▶ CUPS ──▶ impresora
-```
+## Qué necesita la PC
+
+| Requisito | Para qué | Descarga |
+|---|---|---|
+| Windows 10/11 x64 | Todo | — |
+| **Driver XPS de Entrust 8.8** | Es la impresora que ve Windows (`XPS Card Printer`); el SDK va encima | [XPSCardPrinter_8.8.048.0.exe](https://downloads.entrust.com/drivers/XPSCardPrinter_8.8.048.0.exe) · [página de soporte DS3](https://www.entrust.com/support/instant-id-card-issuance-systems/ds3-direct-to-card-printer-support) |
+| **.NET 8 Desktop Runtime (x64)** | Lo usa `bridge\CardBridge.exe` | [dotnet.microsoft.com/download/dotnet/8.0](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| La DS3 conectada por USB y encendida | — | — |
+
+Si falta algo, `CarnetPrint.exe` lo avisa al abrir: en la consola y en un aviso amarillo arriba de la página,
+con el enlace de descarga y un botón «Volver a comprobar». No descarga ni instala nada por su cuenta.
+
+> Los instaladores **no están en este repo** (licencia de terceros): se bajan de los enlaces de arriba.
 
 ## Uso
 
-```bash
-python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-cp .env.example .env && cp printers.example.yaml printers.yaml   # editar
-.venv/bin/uvicorn app.main:create_app --factory --port 8080
-.venv/bin/pytest
-```
+1. Copia `CarnetPrint.exe` y la carpeta `bridge\` juntas a cualquier carpeta de la PC.
+2. Doble clic. Se abre el navegador en `http://localhost:8787/ui/generador-carnets.html`.
+3. La primera vez se crean, junto al `.exe`, `.env` (con una **API key aleatoria**, también impresa en consola)
+   y `printers.yaml` (con la DS3). Si la Windows llama distinto a la impresora, edita `printer_name`.
+4. Toca la tarjeta para escribir nombre, cédula y categoría; sube la foto; **Generar, registrar e imprimir**.
 
-| Endpoint | Descripción |
-|---|---|
-| `GET /health` | Público |
-| `GET /printers` | Impresoras y estado (`ready`/`offline`/`unknown`) |
-| `POST /jobs` | multipart: `printer_id`, `pdf` **o** `front`+`back` (PNG 300 ppp, el middleware arma el PDF CR80), `copies` (1-10), `options` (JSON). Devuelve 202 + job |
-| `GET /printers/{id}/options` | Opciones CUPS permitidas por impresora |
-| `GET /jobs/{id}` | `queued` → `submitted` / `failed` |
-
-Todos (salvo `/health`) requieren header `X-API-Key`. Pág. 1 del PDF = frente, pág. 2 = reverso.
-Estado `submitted` = aceptado por CUPS, no "carnet impreso" (ver pendientes).
-
-## UI (generador de carnets)
-
-`web/generador-carnets.html` se sirve en `http://localhost:8080/ui/generador-carnets.html`. Las impresoras
-“vía middleware (API)” rasterizan frente/reverso en el navegador (1011×638 px) y las envían a `POST /jobs`.
-La URL y la API key se guardan en `localStorage` (panel “Conexión al middleware”).
-
-## Estado de verificación
-
-- **Zebra ZC300 (verificado, macOS):** driver Mac 1.0.10.0 de Zebra instalado, cola CUPS `Zebra_ZC300`
-  por USB, tarjeta de prueba de 2 páginas impresa vía `POST /jobs`, y tarjeta real impresa desde el generador
-  (`/ui/generador-carnets.html`, impresora “ZC300 vía API”). Opciones tomadas del PPD oficial
-  (ver `printers.example.yaml`). El driver Linux de Zebra (DZCG.1.0.0.0, 2018) **no** está probado.
-- **Entrust Sigma DS3 (sin verificar):** hay driver Linux "LXM" (CUPS) según Entrust, pero no se pudo
-  descargar ni probar; el driver XPS es solo Windows. Falta conectar la impresora y obtener el driver.
-- **Overlay con bitmap / paneles de seguridad:** se configuran en la app de Zebra, no por opciones CUPS;
-  por CUPS solo se elige `RibbonName`/`RibbonCombination` (p. ej. `15Hologram`). Probar con la cinta puesta.
-
-## CarnetPrint.exe (Windows, Entrust Sigma DS3)
-
-`build-exe.ps1` genera `dist\CarnetPrint.exe` + `dist\bridge\` (CardBridge.exe y sus DLL). Copiar ambos
-juntos al equipo con el driver XPS de Entrust y el .NET 8 Runtime; doble clic y se abre el generador.
-
-Junto al .exe, en la primera ejecución, se crean solos:
+Todo lo que el programa guarda queda junto al `.exe`:
 
 | Archivo | Contenido |
 |---|---|
-| `.env` | API key aleatoria (también se imprime en consola) |
-| `printers.yaml` | Impresora Entrust (editar `printer_name` si hace falta) |
-| `templates.json` | Plantillas y cuál es la activa para el API |
+| `.env` | API key y opciones (`CARDPRINT_PORT`, `CARDPRINT_OPEN_BROWSER`…). No se comparte |
+| `printers.yaml` | Impresoras y opciones permitidas por trabajo |
+| `templates.json` | Plantillas de diseño y cuál usa el API por defecto |
 | `carnets.json` | Carnets generados (registro, reimpresiones, anulados) |
-| `settings.json` | Ajustes de «Avanzado»: impresora, calidad, tolva y calibración X/Y por impresora |
+| `settings.json` | Ajustes de **Avanzado**: impresora, calidad, tolva y calibración X/Y por impresora |
 | `clients.json` | Perfiles de cliente (modo kiosko) |
 | `png\` | Una carpeta por trabajo (`AAAAMMDD-HHMMSS_<control>`) con `front.png`, `back.png` y las capas K |
 
-API (todos con `X-API-Key`): imprime **directo**, sin PDF.
-- `POST /jobs`: `front` + `back` (PNG), `front_k`/`back_k` opcionales, `template_id` opcional
-  (si no viene se usa la plantilla activa).
-- `GET /templates`, `PUT|GET|DELETE /templates/{id}`, `POST /templates/{id}/activate`.
-- `GET /cards`, `PUT /cards/{control}`.
+Para respaldar o mover el programa basta copiar la carpeta completa.
 
-**Todo se imprime por el API** (PNG directo al SDK de la impresora); ya no hay impresión por el diálogo del
-navegador. La tarjeta de calibración también sale por el API.
+## Modo kiosko por cliente
 
-**Modo kiosko (por cliente):** en «Avanzado > Clientes» se crea un perfil (plantilla fija + campos que se pueden
-llenar). `http://localhost:8787/c/<cliente>` (o `CarnetPrint.exe --client <cliente>`) abre el generador ya
-configurado: sin diseño, sin ajustes, sin selector de plantilla; solo se llenan los campos permitidos. La API key
-solo se incrusta en la página si se abre desde la misma PC.
-`GET|PUT|DELETE /clients/{id}` administran los perfiles.
+En **Avanzado > Clientes** se crea un perfil: plantilla fija + campos que se pueden llenar. El enlace
+`http://localhost:8787/c/<cliente>` (o `CarnetPrint.exe --client <cliente>`) abre el generador ya configurado, sin
+diseño, ajustes ni selector de plantilla. La API key solo se incrusta en la página si se abre desde la misma PC.
+El bloqueo es de interfaz: quien tenga la API key puede llamar al API directamente.
 
-Los datos de un navegador que usaba IndexedDB se suben solos al .exe la primera vez que se abre la UI.
+## API
+
+Todo requiere el header `X-API-Key`, salvo `/health` y `/preflight`.
+
+| Método y ruta | Qué hace |
+|---|---|
+| `POST /jobs` | Imprime: `printer_id`, `front` y `back` (PNG), `front_k`/`back_k` opcionales, `template_id`, `control`, `copies`, `options` |
+| `GET /jobs/{id}` | Estado: `queued` → `printed` / `failed` |
+| `GET /printers`, `GET /printers/{id}/options` | Impresoras y opciones permitidas |
+| `GET /preflight` | Qué le falta a la PC (con enlaces); público |
+| `GET\|PUT\|DELETE /templates/{id}`, `POST /templates/{id}/activate` | Plantillas; la activa es la que usa el API |
+| `GET /cards`, `PUT /cards/{control}` | Carnets generados |
+| `GET\|PUT /settings` | Ajustes de Avanzado |
+| `GET\|PUT\|DELETE /clients/{id}` | Perfiles de cliente |
+
+## Desarrollo
+
+```bash
+python -m venv .venv && .venv/bin/pip install -e ".[dev]"   # en Windows: .venv\Scripts\pip
+cp .env.example .env                                         # y pon tu propia API key
+.venv/bin/python -m pytest
+.venv/bin/python -m app.server                               # http://localhost:8787
+```
+
+Compilar el `.exe` **solo se puede en Windows** (PyInstaller no compila para otro sistema):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File build-exe.ps1   # necesita Python 3.11+ y .NET SDK 8
+```
+
+Genera `dist\CarnetPrint.exe` y `dist\bridge\`.
+
+## Documentación
+
+- Entrust: [guía del driver XPS 8.8](https://www.entrust.com/sites/default/files/documentation/productsupport/527280-005l-xps-card-printer-driver-8-8.pdf) ·
+  [SDK Reference Guide](https://www.entrust.com/sites/default/files/documentation/productsupport/527250-003h-reference-guide-windows-xps-driver-software-development-kit-sdk.pdf) ·
+  [guía de instalación DS1/DS2/DS3](https://www.entrust.com/sites/default/files/documentation/productsupport/528062-001l-ds1-ds2-ds3-inst-admin-guide.pdf) ·
+  [XPS Driver SDK v8.8 (zip)](https://downloads.entrust.com/drivers/XPS_Card_Printer_SDK_v8.8.zip)
+- Arquitectura: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) · Notas de Windows: [WINDOWS.md](WINDOWS.md) · Estado y pendientes: [HANDOFF.md](HANDOFF.md)
+- Zebra ZC300 y CUPS (ya fuera de este flujo): [docs/LEGADO-CUPS-ZEBRA.md](docs/LEGADO-CUPS-ZEBRA.md)
 
 ## Qué no está en el repo
 
-- **Drivers e instaladores** (Entrust XPS 8.8, Zebra): se descargan desde los enlaces de `HANDOFF.md`; no se redistribuyen.
-- **Binarios compilados** (`bridge/bin`, `bridge/zbin`, `obj/`): salen de `build-exe.ps1` o `bridge\build.ps1`.
-- **Secretos**: `.env` no se versiona. El `.exe` lo crea con una API key aleatoria; en desarrollo, copia `.env.example` a `.env`.
-
-## Pendientes / siguiente paso
-
-- Probar cinta Hologram y cinta de seguridad con tarjeta real.
-- Obtener y probar el driver del DS3.
-- Si la webapp está en otro dominio: HTTPS delante (nginx/caddy) y `CARDPRINT_CORS_ORIGINS`.
-- Servicio systemd: `deploy/cardprint.service`.
+Instaladores y drivers, binarios compilados (`bridge\bin`, `obj\`), `.env`, entornos virtuales y los datos que el
+programa genera (`*.json`, `png\`). Los binarios salen de `build-exe.ps1`.

@@ -17,6 +17,7 @@ from pydantic import BaseModel
 from .config import Settings, load_printers
 from .jobs import Job, JobService
 from .paths import resource_dir
+from .preflight import failed, run_checks
 from .printers.registry import build_registry
 from .render import ImageError, faces_to_pdf, normalize_faces
 from .store import NotFound, Store, StoreError
@@ -90,6 +91,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/preflight")
+    def preflight() -> list[dict]:
+        """Qué le falta a esta PC para imprimir (con enlaces de descarga). Público: no lleva secretos."""
+        return failed(run_checks([cfg for cfg, _ in registry.values()]))
 
     @app.get("/printers", response_model=list[PrinterOut], dependencies=[Depends(require_key)])
     def list_printers() -> list[PrinterOut]:

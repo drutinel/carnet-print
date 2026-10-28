@@ -7,9 +7,10 @@ import webbrowser
 import uvicorn
 
 from .bootstrap import ensure_config
-from .config import Settings
+from .config import Settings, load_printers
 from .main import create_app
 from .paths import app_dir
+from .preflight import failed, run_checks
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,10 +24,13 @@ def main(argv: list[str] | None = None) -> int:
     base = f"http://localhost:{settings.port}"
     url = f"{base}/c/{args.client}" if args.client else f"{base}/ui/generador-carnets.html"
     print(f"CarnetPrint en {url}\nDatos en {settings.data_dir} (templates.json, carnets.json)")
+    app = create_app(settings)
+    for problem in failed(run_checks(load_printers(settings.printers_file))):
+        print(f"\n[FALTA] {problem['title']}\n  {problem['detail']}\n  {problem['url']}", file=sys.stderr)
     if settings.open_browser:
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()
     try:
-        uvicorn.run(create_app(settings), host=settings.host, port=settings.port, log_level="info")
+        uvicorn.run(app, host=settings.host, port=settings.port, log_level="info")
     except OSError as exc:
         print(f"No se pudo abrir el puerto {settings.port}: {exc}", file=sys.stderr)
         return 1
