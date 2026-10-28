@@ -128,6 +128,19 @@
           </div>
         </fieldset>
 
+        <fieldset class="group wide"><legend>Campos y márgenes de la tarjeta</legend>
+          <div id="layout-form"></div>
+          <div class="row" style="margin-bottom:10px">
+            <button class="btn sm" id="layout-json-btn" type="button">Editar JSON</button>
+            <button class="btn sm" id="layout-reset" type="button">Restaurar valores por defecto</button>
+          </div>
+          <div id="layout-json" hidden>
+            <textarea id="layout-json-text" spellcheck="false" aria-label="Layout en JSON"></textarea>
+            <div class="row" style="margin-top:8px"><button class="btn sm primary" id="layout-json-apply" type="button">Aplicar y guardar</button></div>
+          </div>
+          <p class="validmsg" id="layout-json-msg"></p>
+        </fieldset>
+
         <fieldset class="group"><legend>Imágenes y colores</legend>
           <div class="grid2">
             <div class="asset" data-key="logo1" data-label="Logo 1 (banda)"></div>

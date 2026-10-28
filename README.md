@@ -49,6 +49,20 @@ La web abierta desde esa misma PC ya trae la clave; desde otra máquina te la pi
 
 Para respaldar o mover el programa basta copiar la carpeta completa (con `images/`).
 
+### Layout de la tarjeta (rótulos, ajuste de texto y márgenes)
+
+En **Diseño de la plantilla > Campos y márgenes de la tarjeta** se cambia, por plantilla: el rótulo de cada campo
+(«Categoría» → «Rango»), su tamaño y negrita, **qué hacer si el texto no cabe** (cortar con «…», achicar la letra o
+varias líneas), los márgenes del frente y del reverso, el tamaño de la foto y el espacio foto-texto. «Editar JSON» muestra
+el mismo layout completo; el servidor lo valida (rangos y claves) antes de guardarlo. Cada carnet guarda el layout con el
+que se hizo, así que reimprimirlo da la misma tarjeta aunque la plantilla cambie después.
+
+```json
+"layout": { "front": {
+  "margins": { "top": 9, "right": 6, "bottom": 9, "left": 6 }, "gap": 8, "photo": { "width": 88, "height": 108 },
+  "fields": { "cat": { "label": "Rango" }, "extra": { "label": "Cargo", "fit": "wrap", "maxLines": 2, "minSize": 9 } } } }
+```
+
 ### Modo kiosko por cliente
 
 En **Avanzado > Clientes** se crea un perfil: plantilla fija + campos que se pueden llenar. `http://localhost:8787/c/<cliente>`

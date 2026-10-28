@@ -239,3 +239,48 @@ def test_clients_without_token_get_one_on_start(make_app, tmp_path):
         stored = json.loads((tmp_path / "clients.json").read_text())["clients"]["viejo"]
         assert len(stored["token"]) >= 24
         assert c.get("/c/viejo").status_code == 200
+
+
+# --- layout editable de la tarjeta ---
+
+LAYOUT = {
+    "front": {
+        "margins": {"top": 6, "right": 8, "bottom": 6, "left": 8},
+        "gap": 8,
+        "photo": {"width": 80, "height": 100},
+        "fields": {"cat": {"label": "Rango", "fit": "shrink"}, "extra": {"label": "Cargo", "fit": "wrap", "maxLines": 2}},
+        "footer": {"code": {"label": "Código"}},
+    },
+    "back": {"margins": {"top": 10}},
+}
+
+
+def test_template_layout_roundtrips_and_is_optional(client):
+    client.put("/templates/a", json={"org": "A"}, headers=KEY)
+    assert client.get("/templates/a", headers=KEY).json()["layout"] is None   # sin layout = valores por defecto
+    client.put("/templates/a", json={"org": "A", "layout": LAYOUT}, headers=KEY)
+    assert client.get("/templates/a", headers=KEY).json()["layout"]["front"]["fields"]["cat"]["label"] == "Rango"
+
+
+@pytest.mark.parametrize(
+    "layout",
+    [
+        {"front": {"fields": {"nombre": {"label": "x"}}}},                 # campo que no existe
+        {"front": {"fields": {"cat": {"fit": "explotar"}}}},
+        {"front": {"fields": {"cat": {"size": 99}}}},
+        {"front": {"fields": {"cat": {"label": "x" * 41}}}},
+        {"front": {"margins": {"top": -1}}},
+        {"front": {"photo": {"width": 500}}},
+        {"front": {"colorsito": 1}},                                       # clave desconocida (erratas del JSON)
+        {"back": {"margins": {"left": 41}}},
+    ],
+)
+def test_layout_is_validated(client, layout):
+    assert client.put("/templates/a", json={"layout": layout}, headers=KEY).status_code == 422
+
+
+def test_card_keeps_the_layout_it_was_made_with(client):
+    body = card_body()
+    body["tpl"] = {**body["tpl"], "layout": LAYOUT}
+    control = client.post("/cards", json=body, headers=KEY).json()["control"]
+    assert client.get(f"/cards/{control}", headers=KEY).json()["tpl"]["layout"]["front"]["gap"] == 8

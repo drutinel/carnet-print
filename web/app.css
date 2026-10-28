@@ -133,7 +133,7 @@
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
   .card .band .org.long{font-size:10px}
   .card .band .ctitle{font-size:9.5px;opacity:.9;text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
-  .card .front-body{display:flex;gap:10px;padding:9px 12px}
+  .card .front-body{display:flex}   /* padding y gap salen del layout */
   .card .photo{width:88px;height:108px;border:2px solid var(--card-accent);border-radius:6px;
     object-fit:cover;background:#eef1f5;flex:0 0 auto}
   .card .photo.ph{display:flex;align-items:center;justify-content:center;color:#9aa4b2;font-size:10px}
@@ -142,7 +142,8 @@
   .card .fld .k{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#4b5563;line-height:1.1}
   .card .fld .v{font-size:12px;font-weight:650;color:var(--card-ink);line-height:1.12;white-space:nowrap;
     overflow:hidden;text-overflow:ellipsis}
-  .card .fld .v.big{font-size:13px}
+  /* Varias líneas (fit:"wrap"): --lines las fija el layout */
+  .card .fld .v.multi{white-space:normal;display:-webkit-box;-webkit-line-clamp:var(--lines,2);-webkit-box-orient:vertical;word-break:break-word}
   /* Datos que van por el panel K (negro resina): negro puro, ver rasterizeFace */
   .card .kblack,.card .fld .v.kblack{color:#000}
   .card .footer{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:auto;padding-top:2px}
@@ -151,7 +152,7 @@
   .card .code .k{font-size:8.5px;font-weight:700;color:#4b5563;text-transform:uppercase}
   .card .code .v{font-size:12px;font-weight:700;color:var(--card-accent);letter-spacing:.04em}
   /* Reverso */
-  .card.back{padding:14px;display:flex;flex-direction:column}
+  .card.back{display:flex;flex-direction:column}   /* padding sale del layout */
   .card.back .legend{font-size:10px;font-weight:600;color:#111418;line-height:1.35;white-space:pre-wrap}
   .card.back .sign{margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
   .card.back .sign .box{text-align:center;flex:1}
@@ -184,3 +185,11 @@
   body.kiosk .admin-only{display:none!important}
   @media (max-width:860px){.wrap,.top{grid-template-columns:1fr}.sticky{position:static}}
   #printer-chip[data-state=busy]{color:var(--warn);border-color:rgba(245,158,11,.4)}
+  .cols .wide{grid-column:1/-1}
+  .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .mini{display:flex;flex-direction:column;gap:3px;font-size:11.5px;color:var(--muted)}
+  .lay-table{margin:10px 0;max-height:none}
+  .lay-table input[type=text]{min-width:120px}
+  .lay-table input[type=number]{width:70px}
+  .lay-table select{min-width:130px}
+  #layout-json-text{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;min-height:260px;white-space:pre}

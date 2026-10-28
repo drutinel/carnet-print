@@ -21,8 +21,57 @@ class Strict(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
 
+Margin = Annotated[float, Field(ge=0, le=40)]
+Label = Annotated[str, StringConstraints(max_length=40)]
+
+
+class Margins(Strict):
+    top: Margin | None = None
+    right: Margin | None = None
+    bottom: Margin | None = None
+    left: Margin | None = None
+
+
+class FieldLayout(Strict):
+    """Un campo de la tarjeta. Todo es opcional: lo que falta toma el valor por defecto (web/lib.js)."""
+
+    label: Label | None = None
+    size: Annotated[float, Field(ge=6, le=24)] | None = None
+    bold: bool | None = None
+    # clip: se corta con «…»; shrink: baja la letra hasta minSize; wrap: varias líneas (maxLines)
+    fit: Literal["clip", "shrink", "wrap"] | None = None
+    maxLines: Annotated[int, Field(ge=1, le=4)] | None = None
+    minSize: Annotated[float, Field(ge=5, le=20)] | None = None
+
+
+class PhotoLayout(Strict):
+    width: Annotated[float, Field(ge=40, le=140)] | None = None
+    height: Annotated[float, Field(ge=50, le=170)] | None = None
+
+
+class FrontLayout(Strict):
+    margins: Margins | None = None
+    gap: Annotated[float, Field(ge=0, le=30)] | None = None  # espacio entre la foto y el texto
+    photo: PhotoLayout | None = None
+    fields: dict[Literal["name", "ced", "cat", "extra"], FieldLayout] | None = None
+    footer: dict[Literal["issue", "expiry", "code"], FieldLayout] | None = None
+
+
+class BackLayout(Strict):
+    margins: Margins | None = None
+
+
+class Layout(Strict):
+    """Rótulos, tamaños, ajuste de texto y márgenes de la tarjeta, editables por plantilla."""
+
+    front: FrontLayout | None = None
+    back: BackLayout | None = None
+
+
 class TemplateFields(Strict):
     """Diseño de la plantilla: textos y medidas (las imágenes van aparte)."""
+
+    layout: Layout | None = None
 
     org: ShortText = ""
     title: ShortText = ""

@@ -1,6 +1,6 @@
 [project]
 name = "card-print-middleware"
-version = "0.2.0"
+version = "0.3.0"
 description = "CarnetPrint: generador e impresor de carnets para la Entrust Sigma DS3 (API FastAPI + web)"
 requires-python = ">=3.11"
 dependencies = [

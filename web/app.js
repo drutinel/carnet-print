@@ -8,13 +8,18 @@ const canEdit=bindId=>!KIOSK || [...EDITABLE].some(f=>FIELD_INPUT[f]===bindId);
 if(KIOSK) document.body.classList.add("kiosk");
 const $ = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
-const {esc,digits,fmtCed,validCed,todayISO,addValidity,fmtDate,slug}=window.CarnetLib;   // funciones puras: web/lib.js
+const {esc,digits,fmtCed,validCed,todayISO,addValidity,fmtDate,slug,resolveLayout,getPath,setPath,fieldsWidth,fitField}=window.CarnetLib;   // funciones puras: web/lib.js
 
 /* ---------- Almacén: API del middleware (templates.json y carnets.json junto al .exe) ---------- */
 async function api(path,opt={}){
   const r=await fetch(apiBase()+path,{...opt,headers:{...apiHeaders(),...(opt.headers||{})}});
   if(r.status===401) throw new Error("API key inválida (abre “Conexión al middleware”)");
-  if(!r.ok){const e=await r.json().catch(()=>({})); throw new Error(typeof e.detail==="string"?e.detail:("error "+r.status));}
+  if(!r.ok){
+    const e=await r.json().catch(()=>({}));
+    // 422 de pydantic: lista de {loc, msg}; se muestra «front.margins.top: Input should be…»
+    const detail=Array.isArray(e.detail)?e.detail.map(d=>`${(d.loc||[]).slice(1).join(".")}: ${d.msg}`).join("; "):e.detail;
+    throw new Error(typeof detail==="string"?detail:("error "+r.status));
+  }
   return r.status===204?null:r.json();
 }
 const jsonPut=(path,obj)=>api(path,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)});
@@ -121,7 +126,12 @@ const TPL_FIELDS={
   orgsize:["t-orgsize","12"], orgbold:["t-orgbold","700"], titlesize:["t-titlesize","9.5"], titlebold:["t-titlebold","400"]
 };
 const TPL_IMAGES=["logo1","logo2","seal","sign"];
-function tpl(){return Object.fromEntries(Object.entries(TPL_FIELDS).map(([k,[id]])=>[k,$("#"+id).value]));}
+// Layout editable (rótulos, tamaños, ajuste de texto, márgenes): se guarda dentro de cada plantilla
+let layoutState=resolveLayout({});
+function tpl(){return {...Object.fromEntries(Object.entries(TPL_FIELDS).map(([k,[id]])=>[k,$("#"+id).value])), layout:layoutState};}
+// Ancho real del texto en el canvas (misma tipografía que la tarjeta) para ajustar los campos largos
+const _measureCtx=document.createElement("canvas").getContext("2d");
+const measureText=(text,size,bold)=>{ _measureCtx.font=`${bold?"bold":"normal"} ${size}px Arial, Helvetica, sans-serif`; return _measureCtx.measureText(text).width; };
 function titleStyles(t){
   return{
     org:`font-size:${t.orgsize||12}px;font-weight:${t.orgbold||700}`,
@@ -147,9 +157,19 @@ function data(){
 // preview=true: la vista previa agrega huecos tocables (logos, dato extra); la imagen impresa no.
 function cardFrontHTML(t,d,preview=false){
   const slots=preview&&!KIOSK;   // huecos tocables: no en modo kiosko
+  const L=resolveLayout(t.layout), F=L.front, m=F.margins;
+  const photoSize=`width:${F.photo.width}px;height:${F.photo.height}px`;
   const photo = img.photo
-    ? `<img class="photo" src="${img.photo}" alt="">`
-    : `<div class="photo ph">FOTO</div>`;
+    ? `<img class="photo" style="${photoSize}" src="${img.photo}" alt="">`
+    : `<div class="photo ph" style="${photoSize}">FOTO</div>`;
+  const vstyle=f=>`font-size:${f.size}px;${f.bold?"":"font-weight:400;"}`;
+  const avail=fieldsWidth(F);
+  // Un campo: rótulo + valor. Si el valor no cabe se ajusta según su política (cortar, achicar o varias líneas)
+  const field=(key,value,bindId)=>{
+    const f=F.fields[key], fit=fitField(value||"—",f,avail,measureText);
+    const style=`font-size:${fit.size}px;${f.bold?"":"font-weight:400;"}${fit.lines>1?`--lines:${fit.lines};`:""}`;
+    return `<div class="fld"><div class="k kblack">${esc(f.label)}</div><div class="v${fit.lines>1?" multi":""} kblack" style="${style}" data-bind="${bindId}">${esc(value)||"—"}</div></div>`;
+  };
   const seal = sealImg(t) ? `<div class="seal" style="${sealStyle(t)}"></div>` : "";
   const logo=(k,id,label)=>img[k]
     ? `<img src="${img[k]}" alt=""${slots?` data-upload="${id}" title="Toca para cambiar el ${label}"`:""}>`
@@ -165,18 +185,18 @@ function cardFrontHTML(t,d,preview=false){
         <span class="ctitle" style="${titleStyles(t).title}" data-bind="t-title">${esc(t.title)||"Carnet"}</span></div>
       <div class="bandside right">${l2}</div>
     </div>
-    <div class="front-body">${photo}
+    <div class="front-body" style="padding:${m.top}px ${m.right}px ${m.bottom}px ${m.left}px;gap:${F.gap}px">${photo}
       <div class="fields">
-        <div class="fld"><div class="k kblack">Nombre</div><div class="v big kblack" data-bind="d-name">${esc(d.name)||"—"}</div></div>
-        <div class="fld"><div class="k kblack">Cédula</div><div class="v kblack" data-bind="d-ced">${esc(d.ced)||"—"}</div></div>
-        <div class="fld"><div class="k kblack">Categoría</div><div class="v kblack" data-bind="d-cat">${esc(d.cat)||"—"}</div></div>
-        ${d.extra||(preview&&canEdit("d-extra"))?`<div class="fld"><div class="k kblack">—</div><div class="v kblack" data-bind="d-extra">${esc(d.extra)}</div></div>`:""}
+        ${field("name",d.name,"d-name")}
+        ${field("ced",d.ced,"d-ced")}
+        ${field("cat",d.cat,"d-cat")}
+        ${d.extra||(preview&&canEdit("d-extra"))?field("extra",d.extra,"d-extra"):""}
         <div class="footer">
           <div class="dates">
-            <div class="fld"><div class="k kblack">Fecha de emisión</div><div class="v kblack">${fmtDate(d.issue)}</div></div>
-            <div class="fld"><div class="k kblack">Fecha de expiración</div><div class="v kblack">${fmtDate(d.expiry)}</div></div>
+            <div class="fld"><div class="k kblack">${esc(F.footer.issue.label)}</div><div class="v kblack" style="${vstyle(F.footer.issue)}">${fmtDate(d.issue)}</div></div>
+            <div class="fld"><div class="k kblack">${esc(F.footer.expiry.label)}</div><div class="v kblack" style="${vstyle(F.footer.expiry)}">${fmtDate(d.expiry)}</div></div>
           </div>
-          <div class="code"><div class="k kblack">Código</div><div class="v" data-bind="d-code">${esc(d.code)||"—"}</div></div>
+          <div class="code"><div class="k kblack">${esc(F.footer.code.label)}</div><div class="v" style="${vstyle(F.footer.code)}" data-bind="d-code">${esc(d.code)||"—"}</div></div>
         </div>
       </div>
     </div></div>`;
@@ -186,9 +206,10 @@ function cardBackHTML(t,d,preview=false){
   const sign = img.sign
     ? `<img src="${img.sign}" alt=""${preview&&!KIOSK?` data-upload="t-sign" title="Toca para cambiar la firma"`:""}>`
     : preview&&!KIOSK?`<div class="ph-slot sign-slot" data-upload="t-sign" title="Toca para subir la firma">+ firma</div>`:"";
-  return `<div class="card back" style="--card-bg:${t.cardbg};--card-band:${t.band};--card-accent:${t.accent}">
+  const bm=resolveLayout(t.layout).back.margins;
+  return `<div class="card back" style="--card-bg:${t.cardbg};--card-band:${t.band};--card-accent:${t.accent};padding:${bm.top}px ${bm.right}px ${bm.bottom}px ${bm.left}px">
     ${seal}
-    <div class="backband"><span class="org${(t.org||"").length>25?" long":""}" style="${titleStyles(t).org}" data-bind="t-org">${esc(t.org)||""}</span></div>
+    <div class="backband" style="margin:-${bm.top}px -${bm.right}px 12px -${bm.left}px"><span class="org${(t.org||"").length>25?" long":""}" style="${titleStyles(t).org}" data-bind="t-org">${esc(t.org)||""}</span></div>
     <div class="legend kblack" data-bind="t-legend">${esc(t.legend)||"Este carnet es propiedad de la organización emisora. En caso de extravío, favor devolverlo."}</div>
     <div class="sign">
       <div class="box">${sign}<div class="line kblack" data-bind="t-signname">${esc(t.signname)||"Firma autorizada"}</div></div>
@@ -337,7 +358,7 @@ function scheduleAutosave(){
   if(!tplReady || !CUR_TPL) return;
   clearTimeout(autosaveTimer);
   const id=CUR_TPL;
-  autosaveTimer=setTimeout(()=>{ putTpl(id,TPLS[id]?.name||id).catch(()=>{}); },800);
+  autosaveTimer=setTimeout(()=>{ putTpl(id,TPLS[id]?.name||id).catch(e=>setStatus("No se pudo guardar la plantilla: "+e.message,"bad")); },800);
 }
 $("#tpl-select").addEventListener("change",e=>{
   const id=e.target.value; if(!id||!TPLS[id]) return;
@@ -347,6 +368,8 @@ $("#tpl-select").addEventListener("change",e=>{
 function applyTpl(s){
   Object.entries(TPL_FIELDS).forEach(([k,[id,def]])=>{ $("#"+id).value=s[k]||def; });
   if(s.img) TPL_IMAGES.forEach(k=>setImg(k,s.img[k]));
+  layoutState=resolveLayout(s.layout);
+  refreshLayoutEditor();
   render();
 }
 $("#new-tpl").addEventListener("click",doNewTpl);
@@ -751,6 +774,73 @@ async function loadPreflight(){
     const b=$("#preflight-retry"); if(b) b.addEventListener("click",loadPreflight);
   }catch(e){ console.warn("No se pudo consultar /preflight:",e); }
 }
+
+/* ---------- Editor del layout: campos, márgenes y JSON ---------- */
+const MARGIN_FIELDS=[["top","Superior"],["right","Derecho"],["bottom","Inferior"],["left","Izquierdo"]];
+const FIELD_ROWS=[["name","Nombre"],["ced","Cédula"],["cat","Categoría"],["extra","Dato extra"]];
+const FOOTER_ROWS=[["issue","Emisión"],["expiry","Expiración"],["code","Código"]];
+const FIT_OPTIONS=[["clip","Cortar con …"],["shrink","Achicar la letra"],["wrap","Varias líneas"]];
+const pid=path=>"lay-"+path.replace(/\./g,"-");
+const numInput=(path,min,max,step=0.5)=>`<input type="number" id="${pid(path)}" data-path="${path}" min="${min}" max="${max}" step="${step}">`;
+function buildLayoutEditor(){
+  const box=$("#layout-form"); if(!box) return;
+  const margins=(side,title)=>`<div class="field"><span>${title} (px)</span><div class="grid4">`+
+    MARGIN_FIELDS.map(([k,l])=>`<label class="mini"><span>${l}</span>${numInput(`${side}.margins.${k}`,0,40)}</label>`).join("")+`</div></div>`;
+  box.innerHTML=
+    margins("front","Márgenes del frente")+
+    `<div class="grid3"><label class="field"><span>Ancho de la foto</span>${numInput("front.photo.width",40,140,1)}</label>
+       <label class="field"><span>Alto de la foto</span>${numInput("front.photo.height",50,170,1)}</label>
+       <label class="field"><span>Espacio foto-texto</span>${numInput("front.gap",0,30)}</label></div>`+
+    margins("back","Márgenes del reverso")+
+    `<div class="table-wrap lay-table"><table><thead><tr><th>Campo</th><th>Rótulo</th><th>Tamaño</th><th>Negrita</th><th>Si no cabe</th><th>Líneas</th><th>Mínimo</th></tr></thead><tbody>`+
+    FIELD_ROWS.map(([k,l])=>`<tr><td>${l}</td>
+      <td><input type="text" id="${pid(`front.fields.${k}.label`)}" data-path="front.fields.${k}.label" maxlength="40"></td>
+      <td>${numInput(`front.fields.${k}.size`,6,24)}</td>
+      <td><input type="checkbox" id="${pid(`front.fields.${k}.bold`)}" data-path="front.fields.${k}.bold"></td>
+      <td><select id="${pid(`front.fields.${k}.fit`)}" data-path="front.fields.${k}.fit">${FIT_OPTIONS.map(([v,t])=>`<option value="${v}">${t}</option>`).join("")}</select></td>
+      <td>${numInput(`front.fields.${k}.maxLines`,1,4,1)}</td>
+      <td>${numInput(`front.fields.${k}.minSize`,5,20)}</td></tr>`).join("")+
+    FOOTER_ROWS.map(([k,l])=>`<tr><td>${l}</td>
+      <td><input type="text" id="${pid(`front.footer.${k}.label`)}" data-path="front.footer.${k}.label" maxlength="40"></td>
+      <td>${numInput(`front.footer.${k}.size`,6,24)}</td>
+      <td><input type="checkbox" id="${pid(`front.footer.${k}.bold`)}" data-path="front.footer.${k}.bold"></td><td colspan="3"></td></tr>`).join("")+
+    `</tbody></table></div>`;
+  refreshLayoutEditor();
+}
+function refreshLayoutEditor(){
+  $$("#layout-form [data-path]").forEach(el=>{
+    const v=getPath(layoutState,el.dataset.path);
+    if(el.type==="checkbox") el.checked=!!v; else el.value=v??"";
+  });
+  const t=$("#layout-json-text"); if(t) t.value=JSON.stringify(layoutState,null,2);
+}
+$("#layout-form").addEventListener("input",e=>{
+  const el=e.target.closest("[data-path]"); if(!el) return;
+  let v=el.type==="checkbox"?el.checked:el.value;
+  if(el.type==="number"){ v=parseFloat(v); if(Number.isNaN(v)) return; }
+  layoutState=setPath(layoutState,el.dataset.path,v);
+  $("#layout-json-text").value=JSON.stringify(layoutState,null,2);
+  render();
+});
+$("#layout-json-btn").addEventListener("click",()=>{ const box=$("#layout-json"); box.hidden=!box.hidden; });
+$("#layout-reset").addEventListener("click",()=>{
+  layoutState=resolveLayout({}); refreshLayoutEditor(); render();
+  $("#layout-json-msg").textContent="Valores por defecto restaurados."; $("#layout-json-msg").className="validmsg ok";
+});
+$("#layout-json-apply").addEventListener("click",async()=>{
+  const msg=$("#layout-json-msg"), previous=layoutState;
+  try{
+    const parsed=JSON.parse($("#layout-json-text").value);
+    if(parsed===null||typeof parsed!=="object"||Array.isArray(parsed)) throw new Error("debe ser un objeto JSON");
+    layoutState=resolveLayout(parsed); refreshLayoutEditor(); render();
+    if(CUR_TPL) await putTpl(CUR_TPL,TPLS[CUR_TPL]?.name||CUR_TPL);   // el servidor valida rangos y claves
+    msg.textContent="Layout aplicado y guardado."; msg.className="validmsg ok";
+  }catch(err){
+    layoutState=previous; refreshLayoutEditor(); render();
+    msg.textContent="No se aplicó: "+err.message; msg.className="validmsg bad";
+  }
+});
+buildLayoutEditor();
 
 /* ---------- Clientes (modo kiosko): perfiles en clients.json ---------- */
 let CLIENTS={};
