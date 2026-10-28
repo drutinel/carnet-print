@@ -1,15 +1,20 @@
 name: Build CarnetPrint.exe
 
 # Compila CarnetPrint.exe (+ bridge\) en un Windows real. PyInstaller no compila para otro sistema.
-#  - Manual:      Actions > Build CarnetPrint.exe > Run workflow  (el resultado queda como artefacto)
-#  - Pull request a main: compila y prueba, sin publicar
-#  - Etiqueta v*:  además publica un Release con el .exe y el zip   (git tag v1.0.0 && git push origin v1.0.0)
+#  - Push a main:      compila, prueba y publica un Release solo, con la versión vX.Y.<n° de ejecución>
+#                      (X.Y salen de `version` en pyproject.toml). Si el mensaje del commit lleva
+#                      [skip release], compila y prueba sin publicar. Los cambios solo de docs no disparan nada.
+#  - Etiqueta v*:      publica un Release con ese nombre   (git tag v1.0.0 && git push origin v1.0.0)
+#  - Pull request:     compila y prueba, sin publicar
+#  - Manual:           Actions > Build CarnetPrint.exe > Run workflow  (el resultado queda como artefacto)
 on:
   workflow_dispatch:
   pull_request:
     branches: [main]
   push:
+    branches: [main]
     tags: ["v*"]
+    paths-ignore: ["**.md", "**.txt", "docs/**", ".gitignore"]
 
 permissions:
   contents: read
@@ -22,8 +27,30 @@ jobs:
   build:
     runs-on: windows-latest
     timeout-minutes: 30
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Versión
+        id: ver
+        shell: pwsh
+        env:
+          EVENT: ${{ github.event_name }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+          RUN_NUMBER: ${{ github.run_number }}
+          SHA: ${{ github.sha }}
+        run: |
+          if ($env:REF_TYPE -eq "tag") { $v = $env:REF_NAME }
+          elseif ($env:EVENT -eq "push") {
+            $m = Select-String -Path pyproject.toml -Pattern '^version = "(\d+)\.(\d+)\.\d+"'
+            if (-not $m) { throw "No encontré version = ""X.Y.Z"" en pyproject.toml" }
+            $v = "v$($m.Matches[0].Groups[1].Value).$($m.Matches[0].Groups[2].Value).$env:RUN_NUMBER"
+          }
+          else { $v = "dev-" + $env:SHA.Substring(0, 7) }
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Versión: $v"
 
       - uses: actions/setup-python@v5
         with:
@@ -75,7 +102,7 @@ jobs:
       - name: Armar el zip
         shell: pwsh
         run: |
-          $name = "CarnetPrint-${{ github.ref_type == 'tag' && github.ref_name || github.sha }}-win-x64"
+          $name = "CarnetPrint-${{ steps.ver.outputs.version }}-win-x64"
           Compress-Archive -Path dist\CarnetPrint.exe, dist\bridge -DestinationPath "$name.zip"
           "ZIP_NAME=$name.zip" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
 
@@ -94,13 +121,16 @@ jobs:
           retention-days: 30
 
   release:
-    # Solo con etiquetas v*: publica el .exe y el zip que armó el job anterior
-    if: github.ref_type == 'tag'
+    # Push a main (salvo [skip release]) o etiqueta v*: publica el zip y el .exe que armó el job anterior
+    if: >-
+      github.event_name == 'push' &&
+      (github.ref_type == 'tag' || !contains(github.event.head_commit.message, '[skip release]'))
     needs: build
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           path: artifacts
@@ -108,6 +138,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          VERSION: ${{ needs.build.outputs.version }}
+          SHA: ${{ github.sha }}
         run: |
-          gh release create "${{ github.ref_name }}" artifacts/CarnetPrint-win-x64/*.zip artifacts/CarnetPrint.exe/CarnetPrint.exe \
-            --title "${{ github.ref_name }}" --generate-notes
+          gh release create "$VERSION" artifacts/CarnetPrint-win-x64/*.zip artifacts/CarnetPrint.exe/CarnetPrint.exe \
+            --target "$SHA" --title "CarnetPrint $VERSION" \
+            --notes-file .github/release-notes.md --generate-notes

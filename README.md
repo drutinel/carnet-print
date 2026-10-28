@@ -84,10 +84,15 @@ Genera `dist\CarnetPrint.exe` y `dist\bridge\`.
 `.github/workflows/build-exe.yml` corre en un Windows de GitHub: pasa los tests, compila el puente y el `.exe`,
 **arranca el `.exe` y comprueba que sirve la web y crea sus archivos**, y sube el resultado.
 
-- **Manual:** *Actions > Build CarnetPrint.exe > Run workflow*. Al terminar, el zip (`CarnetPrint.exe` + `bridge\`) y el
-  `.exe` suelto quedan como artefactos durante 30 días.
-- **Release:** `git tag v1.0.0 && git push origin v1.0.0` publica un Release con el zip y el `.exe`.
+- **Push a `main`:** compila, prueba y **publica un Release solo**, con versión `vX.Y.<n° de ejecución>` (`X.Y` salen de
+  `version` en `pyproject.toml`; sube ese número cuando quieras cambiar de serie). Si el mensaje del commit lleva
+  `[skip release]`, compila y prueba sin publicar. Los cambios solo de documentación no disparan nada.
+- **Etiqueta:** `git tag v1.0.0 && git push origin v1.0.0` publica un Release con ese nombre exacto.
 - **Pull requests a `main`:** compilan y prueban, sin publicar.
+- **Manual:** *Actions > Build CarnetPrint.exe > Run workflow*; el zip y el `.exe` quedan como artefactos 30 días.
+
+Cada Release trae `CarnetPrint-<versión>-win-x64.zip` (`CarnetPrint.exe` + `bridge\`), el `.exe` suelto y las notas de
+`.github/release-notes.md` con los requisitos de la PC.
 
 Los minutos los paga el dueño del repo (gratis si es público). El build no prueba la impresión: eso requiere la DS3
 y el driver XPS en la PC.
