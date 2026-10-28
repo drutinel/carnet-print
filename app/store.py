@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import json
+import logging
 import os
 import re
 import secrets
@@ -8,6 +9,7 @@ import threading
 import time
 from pathlib import Path
 
+logger = logging.getLogger("cardprint.store")
 MAX_TEMPLATES = 200
 MAX_CLIENTS = 500
 _DATA_URI = re.compile(r"^data:image/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$")
@@ -121,6 +123,8 @@ class Store:
         self._cards = JsonFile(data_dir / "carnets.json", {"cards": {}})
         self._settings = JsonFile(data_dir / "settings.json", {})
         self._clients = JsonFile(data_dir / "clients.json", {"clients": {}})
+        self._drafts = JsonFile(data_dir / "draft.json", {"drafts": {}})
+        self._card_dir = data_dir / "carnets"   # un JSON por carnet emitido (copia legible y portable)
 
     def compact(self) -> None:
         """Pasa a `images/` las imágenes que un JSON antiguo aún lleva dentro y da token a los
@@ -130,6 +134,9 @@ class Store:
                 client.setdefault("token", secrets.token_urlsafe(24))
 
         self._clients.update(add_tokens)
+        for card in self._cards.read().get("cards", {}):   # carnets anteriores a los archivos por carnet
+            if not (self._card_dir / f"{card}.json").exists():
+                self._export_card(card)
         self._templates.update(lambda d: d.update(self._blobs.externalize(d)))
         self._cards.update(lambda d: d.update(self._blobs.externalize(d)))
 
@@ -200,8 +207,9 @@ class Store:
             raise NotFound("Carnet no existe")
         return self._blobs.resolve(card)
 
-    def create_card(self, body: dict, template_id: str | None = None) -> dict:
-        """Alta de un carnet: el servidor asigna control y código, así dos kioskos no chocan."""
+    def create_card(self, body: dict, template_id: str | None = None, created_by: str = "admin") -> dict:
+        """Alta de un carnet: el servidor asigna control y código, así dos kioskos no chocan.
+        `created_by` es «admin» o el id del perfil de kiosko (para «continuar desde el último»)."""
         stored = self._blobs.externalize(body)
         created: dict = {}
 
@@ -209,7 +217,7 @@ class Store:
             cards = data.setdefault("cards", {})
             number = max((int(m.group(1)) for k in cards if (m := _CONTROL.match(k))), default=0) + 1
             card = {**stored, "control": f"C-{number:06d}", "createdAt": int(time.time() * 1000),
-                    "prints": 1, "voided": False}
+                    "prints": 1, "voided": False, "createdBy": created_by}
             if template_id:
                 card["templateId"] = template_id
             info = card.setdefault("data", {})
@@ -219,6 +227,7 @@ class Store:
             created.update(card)
 
         self._cards.update(mutate)
+        self._export_card(created["control"])
         return self._light(created)
 
     def put_card(self, control: str, body: dict) -> dict:
@@ -231,6 +240,7 @@ class Store:
             data.setdefault("cards", {})[control] = stored
 
         self._cards.update(mutate)
+        self._export_card(control)
         return self._light(stored)
 
     def _change_card(self, control: str, change) -> dict:
@@ -244,6 +254,7 @@ class Store:
             changed.update(card)
 
         self._cards.update(mutate)
+        self._export_card(control)
         return self._light(changed)
 
     def reprint_card(self, control: str) -> dict:
@@ -251,6 +262,49 @@ class Store:
 
     def void_card(self, control: str) -> dict:
         return self._change_card(control, lambda c: c.__setitem__("voided", True))
+
+    def last_card(self, created_by: str | None = None) -> dict:
+        """El último carnet emitido (completo, con imágenes). `created_by` limita a los de ese
+        administrador o kiosko; sin él, el último de todos."""
+        cards = [c for c in self._cards.read().get("cards", {}).values()
+                 if created_by is None or c.get("createdBy", "admin") == created_by]
+        if not cards:
+            raise NotFound("Aún no hay carnets emitidos")
+        newest = max(cards, key=lambda c: (c.get("createdAt", 0), c.get("control", "")))
+        return self._blobs.resolve(newest)
+
+    def _export_card(self, control: str) -> None:
+        """Copia del carnet como `carnets/<control>.json`, autocontenida (imágenes incluidas) y legible.
+        La fuente de verdad es carnets.json: si la copia no se puede escribir se avisa en el log
+        y el carnet queda registrado igual."""
+        try:
+            card = self.get_card(control)
+            self._card_dir.mkdir(parents=True, exist_ok=True)
+            path = self._card_dir / f"{control}.json"
+            tmp = path.with_suffix(".tmp")
+            tmp.write_text(json.dumps(card, ensure_ascii=False, indent=1), encoding="utf-8")
+            os.replace(tmp, path)
+        except (OSError, StoreError):
+            logger.exception("No se pudo escribir la copia del carnet %s", control)
+
+    # --- borrador del titular (lo que se está llenando): uno por administrador y por kiosko ---
+    def get_draft(self, key: str) -> dict:
+        return self._blobs.resolve(self._drafts.read().get("drafts", {}).get(key, {}))
+
+    def put_draft(self, key: str, body: dict) -> dict:
+        stored = self._blobs.externalize(body)
+
+        def mutate(data: dict) -> None:
+            drafts = data.setdefault("drafts", {})
+            if key not in drafts and len(drafts) > MAX_CLIENTS:
+                raise StoreError("Demasiados borradores")
+            drafts[key] = stored
+
+        self._drafts.update(mutate)
+        return body
+
+    def delete_draft(self, key: str) -> None:
+        self._drafts.update(lambda data: data.setdefault("drafts", {}).pop(key, None))
 
     # --- ajustes de la UI (impresora, desplazamientos, calidad...): settings.json ---
     def get_settings(self) -> dict:

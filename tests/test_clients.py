@@ -131,3 +131,19 @@ def test_admin_page_gets_key_only_for_this_pc(make_app):
 
 def test_favicon_does_not_404(client):
     assert client.get("/favicon.ico").status_code == 204
+
+
+def test_each_kiosk_has_its_own_draft_and_last_card(admin):
+    _put(admin)
+    _put(admin, "otro", name="Otro SA", template_id="otra")
+    one, two = _kiosk_token(admin), _kiosk_token(admin, "otro")
+    admin.put("/draft", json={"name": "Del admin"}, headers=KEY)
+    admin.put("/draft", json={"name": "Del uno"}, headers=one)
+    assert admin.get("/draft", headers=one).json()["name"] == "Del uno"
+    assert admin.get("/draft", headers=two).json() == {}                    # no se mezclan
+    assert admin.get("/draft", headers=KEY).json()["name"] == "Del admin"
+    admin.post("/cards", json=card_body("De uno"), headers=one)
+    admin.post("/cards", json=card_body("De otro"), headers=two)
+    assert admin.get("/cards/last", headers=one).json()["data"]["name"] == "De uno"   # sin registro, pero el suyo
+    assert admin.get("/cards/last", headers=two).json()["data"]["name"] == "De otro"
+    assert admin.get("/cards/last", headers=KEY).json()["data"]["name"] == "De otro"  # el admin ve el último de todos

@@ -290,3 +290,58 @@ def test_data_dir_is_created_if_missing(make_app, tmp_path):
     with TestClient(make_app(data_dir=tmp_path / "nueva" / "carpeta")) as c:
         assert c.post("/cards", json=card_body(), headers=KEY).status_code == 201
         assert (tmp_path / "nueva" / "carpeta" / "carnets.json").exists()
+
+
+# --- borrador del titular, «continuar desde el último» y un JSON por carnet ---
+
+def test_draft_survives_restart_and_keeps_the_photo_out_of_the_json(make_app, tmp_path):
+    uri = data_uri()
+    draft = {"name": "Ana", "ced": "001-1234567-3", "cat": "GENERAL", "photo": uri}
+    with TestClient(make_app()) as c:
+        assert c.get("/draft", headers=KEY).json() == {}
+        assert c.put("/draft", json=draft, headers=KEY).status_code == 200
+    assert "base64" not in (tmp_path / "draft.json").read_text(encoding="utf-8")
+    with TestClient(make_app()) as again:   # «reiniciar»
+        got = again.get("/draft", headers=KEY).json()
+        assert got["name"] == "Ana" and got["photo"] == uri
+        assert again.delete("/draft", headers=KEY).status_code == 204
+        assert again.get("/draft", headers=KEY).json() == {}
+
+
+@pytest.mark.parametrize("body", [{"name": "x" * 201}, {"photo": "javascript:alert(1)"}, {"otro": "campo"}])
+def test_draft_is_validated(client, body):
+    assert client.put("/draft", json=body, headers=KEY).status_code == 422
+
+
+def test_last_card_is_the_latest_one_with_its_images(client):
+    assert client.get("/cards/last", headers=KEY).status_code == 404
+    client.post("/cards", json=card_body("Ana"), headers=KEY)
+    uri = data_uri()
+    client.post("/cards", json=card_body("Beto", img={"photo": uri}), headers=KEY)
+    last = client.get("/cards/last", headers=KEY).json()
+    assert last["data"]["name"] == "Beto" and last["control"] == "C-000002" and last["img"]["photo"] == uri
+
+
+def test_each_card_is_also_written_as_its_own_json_file(client, tmp_path):
+    uri = data_uri()
+    control = client.post("/cards", json=card_body("Ana", img={"photo": uri}), headers=KEY).json()["control"]
+    file = tmp_path / "carnets" / f"{control}.json"
+    assert json.loads(file.read_text(encoding="utf-8"))["data"]["name"] == "Ana"
+    assert json.loads(file.read_text(encoding="utf-8"))["img"]["photo"] == uri   # autocontenido: lleva la foto
+    client.post(f"/cards/{control}/reprint", headers=KEY)
+    client.post(f"/cards/{control}/void", headers=KEY)
+    saved = json.loads(file.read_text(encoding="utf-8"))
+    assert saved["prints"] == 2 and saved["voided"] is True               # la copia sigue al carnet
+
+
+def test_card_files_are_restorable_with_the_normal_import(client, tmp_path):
+    control = client.post("/cards", json=card_body("Ana"), headers=KEY).json()["control"]
+    card = json.loads((tmp_path / "carnets" / f"{control}.json").read_text(encoding="utf-8"))
+    assert client.put("/cards/C-000050", json=card, headers=KEY).status_code == 200
+
+
+def test_cards_from_before_get_their_file_on_start(make_app, tmp_path):
+    (tmp_path / "carnets.json").write_text(json.dumps({"cards": {"C-000001": {
+        "control": "C-000001", "tpl": {}, "data": {"name": "Viejo"}, "img": {}, "createdAt": 1, "prints": 1, "voided": False}}}))
+    with TestClient(make_app()):
+        assert json.loads((tmp_path / "carnets" / "C-000001.json").read_text())["data"]["name"] == "Viejo"

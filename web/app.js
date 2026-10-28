@@ -44,12 +44,32 @@ function setImg(k,value){
   img[k]=value||null;
   const t=$("#th-"+k); if(t){ t.hidden=!img[k]; t.src=img[k]||""; }
 }
+// La foto del titular se reduce a 800 px (JPEG) antes de guardarla: la tarjeta la imprime a ~330 px y una
+// foto de celular de varios MB superaría el límite del servidor. Logos, sello y firma conservan su
+// transparencia (PNG) y solo se reducen si son enormes.
+const IMAGE_RULES={photo:{max:800,type:"image/jpeg",quality:0.9}};
+const DEFAULT_IMAGE_RULE={max:1600,type:"image/png"};
+const readAsDataURL=file=>new Promise((ok,fail)=>{
+  const fr=new FileReader(); fr.onload=()=>ok(fr.result); fr.onerror=()=>fail(fr.error); fr.readAsDataURL(file);
+});
+async function prepareImage(file,rule){
+  const original=await readAsDataURL(file);
+  const bitmap=await createImageBitmap(file);   // SVG o formato raro: createImageBitmap falla y el servidor lo rechazará con su mensaje
+  const scale=Math.min(1,rule.max/Math.max(bitmap.width,bitmap.height));
+  if(scale===1 && rule.type!=="image/jpeg" && file.size<1_500_000){ bitmap.close(); return original; }   // ya es chica: tal cual
+  const canvas=document.createElement("canvas");
+  canvas.width=Math.round(bitmap.width*scale); canvas.height=Math.round(bitmap.height*scale);
+  const g=canvas.getContext("2d");
+  if(rule.type==="image/jpeg"){ g.fillStyle="#fff"; g.fillRect(0,0,canvas.width,canvas.height); }   // JPEG no tiene transparencia
+  g.drawImage(bitmap,0,0,canvas.width,canvas.height); bitmap.close();
+  return canvas.toDataURL(rule.type,rule.quality);
+}
 Object.keys(img).forEach(k=>{
-  $("#"+inputId(k)).addEventListener("change",e=>{
+  $("#"+inputId(k)).addEventListener("change",async e=>{
     const f=e.target.files[0]; if(!f) return;
-    const fr=new FileReader();
-    fr.onload=()=>{setImg(k,fr.result); render();};
-    fr.readAsDataURL(f);
+    try{ setImg(k,await prepareImage(f,IMAGE_RULES[k]||DEFAULT_IMAGE_RULE)); render(); }
+    catch(err){ setStatus("No se pudo leer la imagen: "+err.message,"bad"); }
+    finally{ e.target.value=""; }
   });
 });
 $$("[data-clear]").forEach(b=>b.addEventListener("click",()=>{
@@ -59,33 +79,52 @@ $$("[data-clear]").forEach(b=>b.addEventListener("click",()=>{
 }));
 
 /* ---------- Borrador del titular ----------
-   Nombre, cédula, código, categoría, dato extra, fecha y foto se guardan solos en
-   este navegador (localStorage) mientras se llenan, y se borran cuando el carnet
-   se imprime bien o con "Limpiar titular". Así una recarga no pierde lo escrito. */
-const DRAFT_KEY="carnet-borrador-titular";
+   Lo que se está llenando (nombre, cédula, código, categoría, dato extra, fecha y foto) se guarda solo en el
+   servidor (draft.json junto al .exe) y se recupera al abrir, aunque cambie el navegador, el puerto o se
+   reinicie el programa. Se borra al imprimir bien o con «Limpiar». Cada kiosko tiene el suyo. */
+const LEGACY_DRAFT_KEY="carnet-borrador-titular";   // versiones viejas lo guardaban en el navegador
 const DRAFT_FIELDS=["d-name","d-ced","d-code","d-cat","d-extra","d-issue"];
-let draftDirty=false, draftTimer=0;
+const DRAFT_KEYS={"d-name":"name","d-ced":"ced","d-code":"code","d-cat":"cat","d-extra":"extra","d-issue":"issue"};
+let draftDirty=false, draftTimer=0, draftErrorShown=false;
 function saveDraft(){
   if(!draftDirty) return;
   clearTimeout(draftTimer);
-  draftTimer=setTimeout(()=>{
-    const o=Object.fromEntries(DRAFT_FIELDS.map(id=>[id,$("#"+id).value]));
-    o.photo=img.photo||"";
-    try{ localStorage.setItem(DRAFT_KEY,JSON.stringify(o)); }
-    catch{ try{ o.photo=""; localStorage.setItem(DRAFT_KEY,JSON.stringify(o)); }catch(e){ console.warn("No se pudo guardar el borrador:",e); } }  // foto muy grande
-  },400);
+  draftTimer=setTimeout(async()=>{
+    const body=Object.fromEntries(DRAFT_FIELDS.map(id=>[DRAFT_KEYS[id],$("#"+id).value]));
+    body.photo=img.photo||null;
+    try{ await jsonPut("/draft",body); draftErrorShown=false; }
+    catch(e){
+      console.warn("No se pudo guardar el borrador:",e);
+      if(!draftErrorShown){ draftErrorShown=true; setStatus("No se pudo guardar el borrador: "+e.message,"warn"); }
+    }
+  },500);
 }
-function restoreDraft(){
-  let o=null; try{ o=JSON.parse(localStorage.getItem(DRAFT_KEY)||"null"); }catch(e){ console.warn("Borrador ilegible, se descarta:",e); }
-  if(!o) return false;
-  DRAFT_FIELDS.forEach(id=>{ if(o[id]!=null && o[id]!=="") $("#"+id).value=o[id]; });
+function fillTitular(o){
+  DRAFT_FIELDS.forEach(id=>{ const v=o[DRAFT_KEYS[id]]; if(v!=null && v!=="") $("#"+id).value=v; });
   if(o.photo) setImg("photo",o.photo);
   $("#d-ced").dispatchEvent(new Event("input"));   // formato y validación de la cédula
+}
+async function restoreDraft(){
+  let o={};
+  try{ o=await api("/draft"); }
+  catch(e){ console.warn("No se pudo leer el borrador:",e); return false; }
+  if(!Object.keys(o).length){   // borrador de una versión anterior (estaba en el navegador): se sube una vez
+    try{
+      const old=JSON.parse(localStorage.getItem(LEGACY_DRAFT_KEY)||"null");
+      if(old){
+        o={name:old["d-name"]||"",ced:old["d-ced"]||"",code:old["d-code"]||"",cat:old["d-cat"]||"",
+           extra:old["d-extra"]||"",issue:old["d-issue"]||"",photo:old.photo||null};
+        await jsonPut("/draft",o); localStorage.removeItem(LEGACY_DRAFT_KEY);
+      }
+    }catch(e){ console.warn("No se pudo migrar el borrador viejo:",e); }
+  }
+  if(!Object.values(o).some(v=>v)) return false;
+  fillTitular(o);
   return true;
 }
 function clearDraft(){
   clearTimeout(draftTimer); draftDirty=false;
-  try{ localStorage.removeItem(DRAFT_KEY); }catch(e){ console.warn("No se pudo borrar el borrador:",e); }
+  api("/draft",{method:"DELETE"}).catch(e=>console.warn("No se pudo borrar el borrador:",e));
 }
 function clearTitular(){
   ["d-name","d-ced","d-code","d-cat","d-extra"].forEach(id=>$("#"+id).value="");
@@ -709,6 +748,18 @@ async function lookup(ced){
   setImg("photo",c.img&&c.img.photo);
   setStatus(`Datos de ${c.control} cargados.`,"ok");
 }
+// «Continuar desde el último»: los datos del último carnet emitido, listos para el siguiente.
+// El código queda vacío (el servidor asigna uno nuevo) y la emisión es hoy.
+$("#last-btn").addEventListener("click",async()=>{
+  try{
+    const c=await api("/cards/last"), d=c.data;
+    ["d-name","d-ced","d-code","d-cat","d-extra"].forEach(id=>$("#"+id).value="");
+    fillTitular({name:d.name,ced:d.ced,cat:d.cat,extra:d.extra,photo:c.img&&c.img.photo});
+    $("#d-issue").value=todayISO();
+    draftDirty=true; render();
+    setStatus(`Datos de ${c.control} cargados; el código y la fecha son nuevos.`,"ok");
+  }catch(e){ setStatus("No se pudo cargar el último carnet: "+e.message,"warn"); }
+});
 $("#lookup-btn").addEventListener("click",()=>lookup($("#lookup-ced").value));
 $("#clear-titular").addEventListener("click",()=>{ clearTitular(); setStatus("Titular limpio.","ok"); });
 $("#lookup-ced").addEventListener("input",e=>e.target.value=fmtCed(e.target.value));
@@ -910,7 +961,7 @@ function setupKiosk(){
     await loadPrinters();
   }catch(e){ setStatus("No se pudieron leer los ajustes o las impresoras: "+e.message,"warn"); }
   applyPrinter();
-  if(restoreDraft()) setStatus("Se recuperó el borrador del titular sin imprimir.","ok");
+  if(await restoreDraft()) setStatus("Se recuperó el carnet que estabas llenando.","ok");
   try{
     await refreshTemplates();
     if(KIOSK){

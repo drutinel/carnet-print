@@ -132,9 +132,22 @@ class CardRestore(CardIn):
     """Carnet completo de un respaldo (conserva su control, fecha, reimpresiones y estado)."""
 
     control: ShortText = ""
+    createdBy: ShortText | None = None   # «admin» o el perfil de kiosko que lo emitió
     createdAt: int = Field(0, ge=0)
     prints: int = Field(1, ge=1)
     voided: bool = False
+
+
+class DraftIn(Strict):
+    """Lo que el operador está llenando (todavía sin emitir)."""
+
+    name: ShortText = ""
+    ced: ShortText = ""
+    code: ShortText = ""
+    cat: ShortText = ""
+    extra: ShortText = ""
+    issue: ShortText = ""
+    photo: ImageUri | None = None
 
 
 class CalIn(BaseModel):

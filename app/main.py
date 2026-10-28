@@ -9,7 +9,7 @@ from .config import Settings, load_printers
 from .ctx import Ctx
 from .jobs import JobService
 from .printers.registry import build_registry
-from .routes import cards, clients, jobs, pages, printers, settings as settings_routes, system, templates
+from .routes import cards, clients, draft, jobs, pages, printers, settings as settings_routes, system, templates
 from .status import StatusCache
 from .store import NotFound, Store, StoreError
 
@@ -51,7 +51,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def store_error(_: Request, exc: StoreError) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=422)
 
-    for module in (system, printers, jobs, templates, cards, clients, settings_routes, pages):
+    for module in (system, printers, jobs, templates, cards, clients, draft, settings_routes, pages):
         app.include_router(module.router)
 
     web_dir = pages.WEB_DIR

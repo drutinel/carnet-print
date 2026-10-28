@@ -44,10 +44,14 @@ La web abierta desde esa misma PC ya trae la clave; desde otra máquina te la pi
 | `carnets.json` | Carnets generados (registro, reimpresiones, anulados), sin imágenes |
 | `settings.json` | Ajustes de **Avanzado**: impresora, calidad, tolva y calibración X/Y por impresora |
 | `clients.json` | Perfiles de cliente (modo kiosko) y sus tokens |
+| `draft.json` | El carnet que se estaba llenando (uno por administrador y por kiosko); sobrevive a cerrar el programa |
+| `carnets/` | Un JSON por carnet emitido (`C-000001.json`), con la foto incluida: copia legible que se puede restaurar con «Restaurar respaldo» |
 | `images/` | Logos, sellos, firmas y fotos (una vez cada imagen) |
 | `png/` | Una carpeta por trabajo (`AAAAMMDD-HHMMSS_<control>`) con `front.png`, `back.png` y las capas K |
 
 Para respaldar o mover el programa basta copiar la carpeta completa (con `images/`).
+
+**Si se cierra o se reinicia el programa no se pierde lo que estabas llenando:** el borrador se guarda en el servidor y vuelve solo, aunque abras la web desde otro navegador o puerto. El botón **«Continuar desde el último»** carga los datos del último carnet emitido (el código y la fecha son nuevos). Las fotos se reducen a 800 px al subirlas, así que una foto de celular no supera el límite.
 
 ### Layout de la tarjeta (rótulos, ajuste de texto y márgenes)
 
@@ -83,6 +87,8 @@ exportar. Eliminar el perfil revoca su token. Quien llegue a la URL del kiosko p
 | `GET /templates`, `GET /templates/{id}` | ambos (el kiosko solo la suya) | Plantillas; la activa es la que usa el API |
 | `PUT\|DELETE /templates/{id}`, `POST /templates/{id}/activate` | admin | Administrar plantillas |
 | `POST /cards` | ambos | Alta: el servidor asigna `control` (`C-000001`…) y el código |
+| `GET /cards/last` | ambos | El último carnet emitido por quien llama (el administrador ve el último de todos) |
+| `GET\|PUT\|DELETE /draft` | ambos | El borrador del titular |
 | `GET /cards`, `GET /cards/{control}` | admin, o kiosko con registro | Registro liviano / carnet completo con imágenes |
 | `GET /cards?full=true`, `PUT /cards/{control}`, `POST /cards/{control}/void` | admin | Respaldo, restaurar, anular |
 | `POST /cards/{control}/reprint` | admin, o kiosko con registro | Cuenta una reimpresión |
