@@ -22,6 +22,18 @@ printers:
       mono_dpi: ["300x300", "300x600", "300x1200"]
       color_mode: ["icc", "vivid"]
       split_ribbon: ["ymct_k", "ymc_kt"]
+
+  # Zebra ZC300 por el SDK Link-OS (bridge\\zbin\\ZebraBridge.exe, compilado con bridge\\build.ps1). Sin verificar
+  # con la impresora (ver docs/ZEBRA.md). Para usarla, quita los «#» y compila el puente.
+  # - id: zebra-zc300
+  #   label: Zebra ZC300
+  #   adapter: zebra-sdk
+  #   printer_name: "Zebra ZC300 USB Card Printer"   # informativo; la conexión es USB directa
+  #   allowed_options:
+  #     back_type: ["color", "mono", "none"]
+  #     overlay_front: ["true", "false"]
+  #     overlay_back: ["true", "false"]
+  #     source: ["feeder", "internal", "atm"]
 """
 
 

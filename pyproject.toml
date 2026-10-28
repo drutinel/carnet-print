@@ -1,7 +1,7 @@
 [project]
 name = "card-print-middleware"
 version = "0.2.0"
-description = "Middleware Linux para imprimir carnets (Zebra ZC300, Entrust Sigma DS3) desde una webapp"
+description = "CarnetPrint: generador e impresor de carnets para la Entrust Sigma DS3 (API FastAPI + web)"
 requires-python = ">=3.11"
 dependencies = [
   "fastapi>=0.115",

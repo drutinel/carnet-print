@@ -729,6 +729,15 @@ function download(name,type,content){
   URL.revokeObjectURL(url);
 }
 
+/* ---------- Versión del programa (GET /health) ---------- */
+async function showVersion(){
+  try{
+    const r=await fetch(apiBase()+"/health");
+    const {version}=await r.json();
+    const el=$("#app-version"); el.textContent=version; el.hidden=false;
+  }catch(e){ console.warn("No se pudo leer la versión:",e); }
+}
+
 /* ---------- Requisitos de la PC (/preflight): qué falta instalar y dónde bajarlo ---------- */
 async function loadPreflight(){
   const box=$("#preflight");
@@ -796,6 +805,7 @@ function setupKiosk(){
 (async()=>{
   loadApiCfg();
   loadPreflight();
+  showVersion();
   if(KIOSK){
     if(!$("#api-key").value){   // abierto desde otra PC: el servidor no entrega la clave
       const k=prompt("API key de CarnetPrint (está en el archivo .env junto al .exe):");

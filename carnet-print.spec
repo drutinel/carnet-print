@@ -4,8 +4,8 @@ from PyInstaller.utils.hooks import collect_submodules
 a = Analysis(
     ["run_exe.py"],
     pathex=["."],
-    datas=[("web/generador-carnets.html", "web")],
-    hiddenimports=collect_submodules("uvicorn") + ["multipart", "python_multipart", "pydantic_settings"],
+    datas=[(f"web/{name}", "web") for name in ("generador-carnets.html", "app.css", "app.js", "lib.js")],
+    hiddenimports=collect_submodules("uvicorn") + ["multipart", "python_multipart", "pydantic_settings", "app._build_version"],
     excludes=["pypdfium2", "tkinter"],
 )
 pyz = PYZ(a.pure)

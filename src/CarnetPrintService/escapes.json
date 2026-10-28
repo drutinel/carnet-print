@@ -1,9 +1,0 @@
-{
-  "_comentario": "Cadenas de escape del driver XPS de Entrust. Cópialas de la guía 527250-003f, sección de escapes. Deja en blanco lo que no uses: el servicio avisa si falta algo en vez de imprimir mal. En magstripe, {0} es donde va el dato de la pista.",
-  "topcoat.full": "",
-  "topcoat.none": "",
-  "topcoat.custom": "",
-  "magstripe.track1": "",
-  "magstripe.track2": "",
-  "magstripe.track3": ""
-}

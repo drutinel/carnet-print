@@ -11,11 +11,13 @@ from .config import Settings, load_printers
 from .main import create_app
 from .paths import app_dir
 from .preflight import failed, run_checks
+from .version import VERSION
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="CarnetPrint")
     parser.add_argument("--client", help="abre el generador preconfigurado de ese cliente (modo kiosko)")
+    parser.add_argument("--version", action="version", version=f"CarnetPrint {VERSION}")
     args = parser.parse_args(argv)
     new_key = ensure_config(app_dir())
     settings = Settings()
@@ -23,7 +25,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Primera ejecución. API key (también en {app_dir() / '.env'}): {new_key}")
     base = f"http://localhost:{settings.port}"
     url = f"{base}/c/{args.client}" if args.client else f"{base}/ui/generador-carnets.html"
-    print(f"CarnetPrint en {url}\nDatos en {settings.data_dir} (templates.json, carnets.json)")
+    print(f"CarnetPrint {VERSION} en {url}\nDatos en {settings.data_dir} (templates.json, carnets.json)")
     app = create_app(settings)
     for problem in failed(run_checks(load_printers(settings.printers_file))):
         print(f"\n[FALTA] {problem['title']}\n  {problem['detail']}\n  {problem['url']}", file=sys.stderr)

@@ -77,3 +77,23 @@ def test_preflight_endpoint_is_public(tmp_path):
     app = create_app(Settings(api_key="secret", printers_file=printers, data_dir=tmp_path))
     with TestClient(app) as c:
         assert c.get("/preflight").json() == []
+
+
+def test_windows_printer_driver_reads_powershell_output(monkeypatch):
+    from app import preflight
+    seen = {}
+
+    def fake_run(cmd, **kwargs):
+        seen["env"] = kwargs["env"]["CARDPRINT_CHECK_PRINTER"]
+        return subprocess.CompletedProcess(cmd, 0, "Entrust XPS Card Printer Driver\r\n", "")
+
+    monkeypatch.setattr(preflight.subprocess, "run", fake_run)
+    assert preflight.windows_printer_driver("XPS Card Printer") == "Entrust XPS Card Printer Driver"
+    assert seen["env"] == "XPS Card Printer"   # el nombre viaja por entorno, no pegado al comando
+
+
+def test_windows_printer_driver_is_none_when_powershell_fails(monkeypatch):
+    from app import preflight
+    monkeypatch.setattr(
+        preflight.subprocess, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 1, "", "no existe"))
+    assert preflight.windows_printer_driver("Inexistente") is None

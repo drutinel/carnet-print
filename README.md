@@ -2,75 +2,90 @@
 
 Generador e impresor de carnets (CR80, frente y reverso) para la **Entrust Sigma DS3**. Un solo
 `CarnetPrint.exe` levanta la web de captura, imprime **directo** por el SDK de Entrust (sin PDF y sin
-diálogo de impresión) y guarda plantillas, carnets generados y PNG junto a sí mismo.
+diálogo de impresión) y guarda plantillas, carnets y PNG junto a sí mismo.
 
-## Qué necesita la PC
+## Instalar
 
-| Requisito | Para qué | Descarga |
-|---|---|---|
-| Windows 10/11 x64 | Todo | — |
-| **Driver XPS de Entrust 8.8** | Es la impresora que ve Windows (`XPS Card Printer`); el SDK va encima | [XPSCardPrinter_8.8.048.0.exe](https://downloads.entrust.com/drivers/XPSCardPrinter_8.8.048.0.exe) · [página de soporte DS3](https://www.entrust.com/support/instant-id-card-issuance-systems/ds3-direct-to-card-printer-support) |
-| **.NET 8 Desktop Runtime (x64)** | Lo usa `bridge\CardBridge.exe` | [dotnet.microsoft.com/download/dotnet/8.0](https://dotnet.microsoft.com/download/dotnet/8.0) |
-| La DS3 conectada por USB y encendida | — | — |
+Descarga `CarnetPrint-Setup-<versión>.exe` de la [última release](https://github.com/drutinel/carnet-print/releases/latest)
+y ejecútalo. En una sola pasada:
 
-Si falta algo, `CarnetPrint.exe` lo avisa al abrir: en la consola y en un aviso amarillo arriba de la página,
-con el enlace de descarga y un botón «Volver a comprobar». No descarga ni instala nada por su cuenta.
+- copia el programa a `C:\CarnetPrint` (ahí se guardan también tus datos);
+- instala el **.NET 8 Desktop Runtime** si falta (incluido, sin internet);
+- ofrece descargar e instalar el **driver XPS de Entrust 8.8** si Windows no tiene la impresora `XPS Card Printer`;
+- crea los accesos directos. Al desinstalar **no** borra tus datos.
 
-> Los instaladores **no están en este repo** (licencia de terceros): se bajan de los enlaces de arriba.
+Windows SmartScreen puede avisar de «editor desconocido» (los archivos no están firmados): *Más información > Ejecutar de todos modos*.
 
-## Uso
+**A mano:** copia `CarnetPrint.exe` **y la carpeta `bridge\` juntas** (solo el `.exe` no basta). Requisitos:
 
-**Instalador (recomendado):** ejecuta `CarnetPrint-Setup-<versión>.exe` de la [última release](https://github.com/drutinel/carnet-print/releases/latest). Copia el programa a `C:\CarnetPrint`, instala el .NET 8 Desktop Runtime si falta (incluido, sin internet) y ofrece instalar el driver XPS de Entrust. No borra tus datos al desinstalar.
+| Requisito | Descarga |
+|---|---|
+| Driver XPS de Entrust 8.8 | [XPSCardPrinter_8.8.048.0.exe](https://downloads.entrust.com/drivers/XPSCardPrinter_8.8.048.0.exe) · [soporte DS3](https://www.entrust.com/support/instant-id-card-issuance-systems/ds3-direct-to-card-printer-support) |
+| .NET 8 Desktop Runtime (x64) | [dotnet.microsoft.com/download/dotnet/8.0](https://dotnet.microsoft.com/download/dotnet/8.0) |
+| La DS3 conectada por USB y encendida | — |
 
-**A mano:** copia `CarnetPrint.exe` **y la carpeta `bridge\` juntos** a una carpeta de la PC (solo el `.exe` no basta: avisará que falta `CardBridge.exe`).
+Si falta algo, el programa lo avisa **al abrir** (consola y aviso amarillo en la web) con el enlace de descarga.
 
-1. Doble clic. Se abre el navegador en `http://localhost:8787/ui/generador-carnets.html`.
-3. La primera vez se crean, junto al `.exe`, `.env` (con una **API key aleatoria**, también impresa en consola)
-   y `printers.yaml` (con la DS3). Si la Windows llama distinto a la impresora, edita `printer_name`.
-4. Toca la tarjeta para escribir nombre, cédula y categoría; sube la foto; **Generar, registrar e imprimir**.
+## Usar
 
-Todo lo que el programa guarda queda junto al `.exe`:
+1. Abre **CarnetPrint** (el acceso directo, o `CarnetPrint.exe`). Se abre `http://localhost:8787/ui/generador-carnets.html`.
+2. La primera vez se crean junto al `.exe` el `.env` (con una **API key aleatoria**) y `printers.yaml`. Si Windows llama
+   distinto a la impresora, edita `printer_name` en `printers.yaml`.
+3. Toca la tarjeta para escribir nombre, cédula y categoría; sube la foto; **Generar, registrar e imprimir**.
+   El servidor asigna el número de control y el código.
 
-| Archivo | Contenido |
+La web abierta desde esa misma PC ya trae la clave; desde otra máquina te la pide (está en `.env`).
+
+| Archivo junto al `.exe` | Contenido |
 |---|---|
 | `.env` | API key y opciones (`CARDPRINT_PORT`, `CARDPRINT_OPEN_BROWSER`…). No se comparte |
 | `printers.yaml` | Impresoras y opciones permitidas por trabajo |
 | `templates.json` | Plantillas de diseño y cuál usa el API por defecto |
-| `carnets.json` | Carnets generados (registro, reimpresiones, anulados) |
+| `carnets.json` | Carnets generados (registro, reimpresiones, anulados), sin imágenes |
 | `settings.json` | Ajustes de **Avanzado**: impresora, calidad, tolva y calibración X/Y por impresora |
-| `clients.json` | Perfiles de cliente (modo kiosko) |
-| `png\` | Una carpeta por trabajo (`AAAAMMDD-HHMMSS_<control>`) con `front.png`, `back.png` y las capas K |
+| `clients.json` | Perfiles de cliente (modo kiosko) y sus tokens |
+| `images/` | Logos, sellos, firmas y fotos (una vez cada imagen) |
+| `png/` | Una carpeta por trabajo (`AAAAMMDD-HHMMSS_<control>`) con `front.png`, `back.png` y las capas K |
 
-Para respaldar o mover el programa basta copiar la carpeta completa.
+Para respaldar o mover el programa basta copiar la carpeta completa (con `images/`).
 
-## Modo kiosko por cliente
+### Modo kiosko por cliente
 
-En **Avanzado > Clientes** se crea un perfil: plantilla fija + campos que se pueden llenar. El enlace
-`http://localhost:8787/c/<cliente>` (o `CarnetPrint.exe --client <cliente>`) abre el generador ya configurado, sin
-diseño, ajustes ni selector de plantilla. La API key solo se incrusta en la página si se abre desde la misma PC.
-El bloqueo es de interfaz: quien tenga la API key puede llamar al API directamente.
+En **Avanzado > Clientes** se crea un perfil: plantilla fija + campos que se pueden llenar. `http://localhost:8787/c/<cliente>`
+(o `CarnetPrint.exe --client <cliente>`) abre el generador ya configurado, sin diseño, ajustes ni selector de plantilla.
+Cada perfil tiene **su propio token**, que el servidor limita: solo imprime y registra con su plantilla, lee la
+configuración y, si el perfil lo permite, el registro. No puede cambiar plantillas, ajustes ni perfiles, ni anular o
+exportar. Eliminar el perfil revoca su token. Quien llegue a la URL del kiosko puede usarlo (es su propósito).
 
 ## API
 
-Todo requiere el header `X-API-Key`, salvo `/health` y `/preflight`.
+`X-API-Key` con la API key (administrador) o con el token de un kiosko. Públicos: `/health` y `/preflight`.
 
-| Método y ruta | Qué hace |
-|---|---|
-| `POST /jobs` | Imprime: `printer_id`, `front` y `back` (PNG), `front_k`/`back_k` opcionales, `template_id`, `control`, `copies`, `options` |
-| `GET /jobs/{id}` | Estado: `queued` → `printed` / `failed` |
-| `GET /printers`, `GET /printers/{id}/options` | Impresoras y opciones permitidas |
-| `GET /preflight` | Qué le falta a la PC (con enlaces); público |
-| `GET\|PUT\|DELETE /templates/{id}`, `POST /templates/{id}/activate` | Plantillas; la activa es la que usa el API |
-| `GET /cards`, `PUT /cards/{control}` | Carnets generados |
-| `GET\|PUT /settings` | Ajustes de Avanzado |
-| `GET\|PUT\|DELETE /clients/{id}` | Perfiles de cliente |
+| Método y ruta | Quién | Qué hace |
+|---|---|---|
+| `POST /jobs` | ambos | Imprime: `printer_id`, `front` y `back` (PNG), `front_k`/`back_k` opcionales, `template_id`, `control`, `copies`, `options` |
+| `GET /jobs/{id}` | ambos | `queued` → `printed` / `failed` |
+| `GET /printers`, `GET /printers/{id}/options` | ambos | Impresoras (`ready`, `busy`, `offline`, `unknown`; con caché) y opciones permitidas |
+| `GET /templates`, `GET /templates/{id}` | ambos (el kiosko solo la suya) | Plantillas; la activa es la que usa el API |
+| `PUT\|DELETE /templates/{id}`, `POST /templates/{id}/activate` | admin | Administrar plantillas |
+| `POST /cards` | ambos | Alta: el servidor asigna `control` (`C-000001`…) y el código |
+| `GET /cards`, `GET /cards/{control}` | admin, o kiosko con registro | Registro liviano / carnet completo con imágenes |
+| `GET /cards?full=true`, `PUT /cards/{control}`, `POST /cards/{control}/void` | admin | Respaldo, restaurar, anular |
+| `POST /cards/{control}/reprint` | admin, o kiosko con registro | Cuenta una reimpresión |
+| `GET\|PUT /settings` | lee: ambos · escribe: admin | Ajustes de Avanzado |
+| `GET\|PUT\|DELETE /clients/{id}` | admin | Perfiles de kiosko |
+| `GET /preflight`, `GET /health` | público | Qué le falta a la PC (con enlaces); estado y versión |
+
+Todo JSON de entrada se valida con límites de tamaño; las imágenes deben ser `data:image/(png|jpeg|webp|gif)` de hasta ~2 MB.
+Detalle de diseño: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
 
 ## Desarrollo
 
 ```bash
 python -m venv .venv && .venv/bin/pip install -e ".[dev]"   # en Windows: .venv\Scripts\pip
 cp .env.example .env                                         # y pon tu propia API key
-.venv/bin/python -m pytest
+.venv/bin/python -m pytest                                   # Python
+node --test tests/js/*.test.js                               # funciones puras de la web
 .venv/bin/python -m app.server                               # http://localhost:8787
 ```
 
@@ -80,36 +95,39 @@ Compilar el `.exe` **solo se puede en Windows** (PyInstaller no compila para otr
 powershell -ExecutionPolicy Bypass -File build-exe.ps1   # necesita Python 3.11+ y .NET SDK 8
 ```
 
-Genera `dist\CarnetPrint.exe` y `dist\bridge\`. El instalador (`installer\CarnetPrint.iss`, Inno Setup 6.1+) se compila en el workflow, que además descarga el .NET Desktop Runtime y verifica su firma de Microsoft.
+Genera `dist\CarnetPrint.exe` y `dist\bridge\`. El instalador (`installer\CarnetPrint.iss`, Inno Setup 6.1+) se compila
+en el workflow.
 
-### Compilar con GitHub Actions (sin PC Windows)
+### GitHub Actions
 
-`.github/workflows/build-exe.yml` corre en un Windows de GitHub: pasa los tests, compila el puente y el `.exe`,
-**arranca el `.exe` y comprueba que sirve la web y crea sus archivos**, y sube el resultado.
+`.github/workflows/build-exe.yml` corre en un Windows de GitHub: tests de Python y de la web, compila el puente y el
+`.exe`, **arranca el `.exe` y comprueba que sirve la web**, arma el instalador y lo prueba en silencio.
 
-- **Push a `main`:** compila, prueba y **publica un Release solo**, con versión `vX.Y.<n° de ejecución>` (`X.Y` salen de
-  `version` en `pyproject.toml`; sube ese número cuando quieras cambiar de serie). Si el mensaje del commit lleva
-  `[skip release]`, compila y prueba sin publicar. Los cambios solo de documentación no disparan nada.
-- **Etiqueta:** `git tag v1.0.0 && git push origin v1.0.0` publica un Release con ese nombre exacto.
-- **Pull requests a `main`:** compilan y prueban, sin publicar.
-- **Manual:** *Actions > Build CarnetPrint.exe > Run workflow*; el zip y el `.exe` quedan como artefactos 30 días.
+- **Push a `main`:** publica un Release con versión `vX.Y.<n° de ejecución>` (`X.Y` salen de `version` en `pyproject.toml`).
+  `[skip release]` en el mensaje del commit compila y prueba sin publicar. Los cambios solo de documentación no disparan nada.
+  Se conservan los **10 releases más recientes**; los anteriores se borran junto con su etiqueta.
+- **Etiqueta `v*`:** publica un Release con ese nombre exacto.
+- **Pull request / manual:** compila y prueba; el resultado queda como artefacto 30 días.
 
-Cada Release trae `CarnetPrint-Setup-<versión>.exe` (instalador), `CarnetPrint-<versión>-win-x64.zip` (`CarnetPrint.exe` + `bridge\`), el `.exe` suelto y las notas de
-`.github/release-notes.md` con los requisitos de la PC.
-
-Los minutos los paga el dueño del repo (gratis si es público). El build no prueba la impresión: eso requiere la DS3
-y el driver XPS en la PC.
-
-## Documentación
-
-- Entrust: [guía del driver XPS 8.8](https://www.entrust.com/sites/default/files/documentation/productsupport/527280-005l-xps-card-printer-driver-8-8.pdf) ·
-  [SDK Reference Guide](https://www.entrust.com/sites/default/files/documentation/productsupport/527250-003h-reference-guide-windows-xps-driver-software-development-kit-sdk.pdf) ·
-  [guía de instalación DS1/DS2/DS3](https://www.entrust.com/sites/default/files/documentation/productsupport/528062-001l-ds1-ds2-ds3-inst-admin-guide.pdf) ·
-  [XPS Driver SDK v8.8 (zip)](https://downloads.entrust.com/drivers/XPS_Card_Printer_SDK_v8.8.zip)
-- Arquitectura: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md) · Notas de Windows: [WINDOWS.md](WINDOWS.md) · Estado y pendientes: [HANDOFF.md](HANDOFF.md)
-- Zebra ZC300 y CUPS (ya fuera de este flujo): [docs/LEGADO-CUPS-ZEBRA.md](docs/LEGADO-CUPS-ZEBRA.md)
+Las acciones están fijadas por SHA y Dependabot propone las actualizaciones. Los minutos los paga el dueño del repo
+(gratis si es público).
 
 ## Qué no está en el repo
 
-Instaladores y drivers, binarios compilados (`bridge\bin`, `obj\`), `.env`, entornos virtuales y los datos que el
-programa genera (`*.json`, `png\`). Los binarios salen de `build-exe.ps1`.
+Instaladores y drivers (se bajan de los enlaces de arriba), binarios compilados, `.env`, entornos virtuales y los
+datos que el programa genera. El `.exe` crea su propio `.env` y `printers.yaml`.
+
+## Estado y pendientes
+
+- **Verificado con la DS3 real:** impresión frente/reverso con el puente de Entrust (versión de desarrollo en Windows).
+- **No verificado:** el instalador y el aviso de requisitos en una PC limpia; la impresión con los builds publicados.
+- Probar cinta Hologram y de seguridad con tarjeta real.
+- Los archivos no están firmados (SmartScreen avisa); firmarlos requiere un certificado de firma de código.
+- Zebra ZC300: conservada pero sin verificar con la impresora → [docs/ZEBRA.md](docs/ZEBRA.md).
+
+## Documentación de Entrust
+
+[Guía del driver XPS 8.8](https://www.entrust.com/sites/default/files/documentation/productsupport/527280-005l-xps-card-printer-driver-8-8.pdf) ·
+[SDK Reference Guide](https://www.entrust.com/sites/default/files/documentation/productsupport/527250-003h-reference-guide-windows-xps-driver-software-development-kit-sdk.pdf) ·
+[Guía de instalación DS1/DS2/DS3](https://www.entrust.com/sites/default/files/documentation/productsupport/528062-001l-ds1-ds2-ds3-inst-admin-guide.pdf) ·
+[XPS Driver SDK v8.8 (zip)](https://downloads.entrust.com/drivers/XPS_Card_Printer_SDK_v8.8.zip)

@@ -1,131 +1,59 @@
-# CarnetPrintService — arquitectura y estado real
-
-Este documento es para quien vaya a instalar o a seguir desarrollando el
-middleware, no para el operador que solo hace carnets. Léelo antes de
-conectar una impresora de verdad.
-
-## Qué resuelve
-
-El generador (`web/generador-carnets.html`) es un archivo HTML suelto. Hasta
-ahora imprimía abriendo el diálogo del navegador, lo que significa que el
-tamaño de página, los márgenes y la escala dependían de que el operador los
-dejara exactamente en "CR80 / Ninguno / 100 %" cada vez — y de que Chrome
-redondeara los milímetros igual todos los días.
-
-`CarnetPrintService` es un servicio pequeño que corre en la misma PC,
-escucha solo en `127.0.0.1:17580` y recibe las dos imágenes del carnet ya
-rasterizadas. Él fija el tamaño de página en centésimas de pulgada exactas y
-dibuja en coordenadas absolutas, así que el navegador deja de intervenir en
-la medida. Esa es la mejora real y ya funciona.
-
-Todo lo que necesita el SDK propio de cada fabricante — banda magnética,
-topcoat, panel UV, estado del equipo — queda detrás de una interfaz
-(`IPrinterDriver`) y, mientras no esté verificado contra el equipo real,
-el servicio sigue imprimiendo por el spooler de Windows en vez de fallar.
-
-## Las tres piezas
+# Arquitectura
 
 ```
-generador-carnets.html  →  http://127.0.0.1:17580  →  CarnetPrintService
-   (en el navegador)           (solo local)           (servicio de Windows)
-                                                              │
-                                                    ┌─────────┴─────────┐
-                                                    │                   │
-                                              EntrustXpsDriver    ZebraCardDriver
-                                                    │                   │
-                                              (spooler ahora;     (spooler ahora;
-                                               SDK cuando se        SDK cuando se
-                                               verifique)           verifique)
+navegador (web/) ──HTTP──▶ FastAPI (app/) ──cola serial por impresora──▶ CardBridge.exe ──▶ driver XPS ──▶ DS3
+      │                        │
+      │ PNG por cara           ├─ templates.json · carnets.json · settings.json · clients.json
+      └ rasteriza en el        ├─ images/ (imágenes por hash)  ·  png/ (lo que se mandó a imprimir)
+        navegador              └─ printers.yaml · .env
 ```
 
-- **`web/generador-carnets.html`** — sin cambios de fondo respecto a la
-  versión anterior. Se le agregó la casilla "Imprimir por el servicio de
-  impresión": si el servicio responde, rasteriza la tarjeta con
-  `html2canvas` a 300 ppp exactos y la manda por `fetch`; si el servicio no
-  responde o falla, cae sola al diálogo del navegador de siempre. Nunca deja
-  al operador sin forma de imprimir.
-- **`src/CarnetPrintService/`** — el servicio en C# / .NET 8. Expone
-  `/health`, `/printers`, `/print` y `/jobs`.
-- **`tools/mock-service.js`** — el mismo contrato HTTP en Node, para probar
-  el generador sin instalar nada de Windows. Guarda los PNG recibidos en
-  `tools/salida/` en vez de imprimir. Así se validó el flujo completo
-  (ver más abajo).
+Todo corre en la misma PC, junto a `CarnetPrint.exe`. El navegador dibuja el carnet y lo rasteriza a PNG a
+1015×640 px (300 ppp, tamaño nativo del driver); el servidor valida, archiva y manda los PNG al puente.
 
-## Lo que SÍ está verificado
+## Módulos (`app/`)
 
-- El contrato HTTP completo (`/health`, `/printers`, `/print`, `/jobs`),
-  probado de punta a punta contra `mock-service.js`: el generador rasteriza
-  el carnet, lo manda, el servicio simulado lo guarda, y el tamaño que llega
-  es el esperado.
-- La impresión por el spooler de Windows (`SpoolDriver`): tamaño de página
-  CR80 en centésimas de pulgada exactas, márgenes en cero, dibujo en
-  coordenadas absolutas con desplazamiento fino en mm. Esta es una técnica
-  estándar de `System.Drawing.Printing` y no depende de ningún SDK — es lo
-  que realmente imprime en la ENTRUST y en la ZC300 desde el primer día.
-- La normalización de imagen (`CardRenderer`): cualquier PNG que llegue se
-  centra y se recorta al lienzo exacto de 1012 × 638 px (CR80 a 300 ppp),
-  nunca se deforma.
-- El respaldo automático en el HTML: si el servicio no está corriendo, o
-  falla a mitad de un trabajo, el generador avisa y usa el diálogo del
-  navegador sin que el operador tenga que hacer nada.
+| Módulo | Responsabilidad |
+|---|---|
+| `server.py`, `run_exe.py` | Punto de entrada del `.exe`: crea la config, comprueba requisitos, levanta el API |
+| `main.py` | `create_app()`: arma el contexto y monta los routers |
+| `routes/` | Un router por tema (`jobs`, `cards`, `templates`, `clients`, `settings`, `printers`, `pages`, `system`). Delgados: validan y delegan |
+| `schemas.py` | Esquemas pydantic de toda entrada JSON, con límites de tamaño |
+| `deps.py` | Autenticación: `Principal` (administrador con la API key, o kiosko con su token) y los permisos `require_*` |
+| `store.py` | Los cuatro JSON (escritura atómica con lock) y `images/` (imágenes por hash). Asigna controles |
+| `jobs.py` | Cola serial por impresora; recuerda los últimos 500 trabajos |
+| `status.py` | Estado de la impresora con caché: no lanza el puente si hay un trabajo en curso ni más de una vez cada 20 s |
+| `preflight.py` | Requisitos de la PC (.NET, `CardBridge.exe`, impresora de Windows) con enlaces de descarga |
+| `printers/` | Adaptadores: `entrust-sdk` y `zebra-sdk` (puente por línea de comandos) y `mock` (tests) |
+| `render.py` | Valida y normaliza los PNG (RGB sin alfa; capas K a 1 bit del mismo tamaño) |
 
-## Lo que NO está verificado — y qué hace falta para verificarlo
+## Decisiones
 
-Esto es exactamente lo que señalé en la investigación de los SDK: ninguno
-de los dos fabricantes publica un ensamblado .NET que se pueda descargar y
-probar sin tener el instalador completo del SDK y, en el caso de Entrust,
-sin tener la impresora enfrente. El código para ambos está escrito contra
-la documentación pública, con el ciclo de llamadas correcto, pero con los
-cuerpos marcados `TODO(SDK)` donde hace falta el ensamblado real.
+- **Sin PDF ni diálogo de impresión:** los PNG van directo al SDK. El tamaño de página y la escala ya no dependen del navegador.
+- **El servidor asigna el control** (`C-000001`…) dentro del lock del archivo: dos kioskos a la vez no se pisan.
+- **Imágenes aparte:** un logo que usan mil carnets se guarda una vez; `carnets.json` y `templates.json` quedan livianos
+  y el registro (`GET /cards`) no lleva imágenes. Los JSON viejos con imágenes dentro se compactan al arrancar.
+- **Kiosko con token propio:** el servidor, no la web, hace cumplir lo que puede hacer (ver README). La API key solo se
+  incrusta en la página del administrador si el navegador está en la misma PC (peer loopback y `Host` local, contra DNS rebinding).
+- **Entradas validadas:** nada se guarda sin pasar por un esquema con límites (texto, imágenes, número de plantillas y clientes).
+- **Si no se puede archivar el PNG, no se imprime.**
 
-**Entrust (`Printing/EntrustXpsDriver.cs`)**
-1. Instalar "XPS Card Printer Driver SDK v8.8" desde el soporte del DS3.
-2. Abrir el ensamblado `dxp01sdk` con el Examinador de objetos de Visual
-   Studio y confirmar los nombres de tipo y de método reales — el código
-   asume `StartJob` / `EndJob` sobre `IBidiSpl` y el patrón Print Ticket que
-   describe la guía de referencia (527250-003f), pero las firmas exactas se
-   tienen que leer del ensamblado, no de la documentación en PDF.
-3. Copiar las cadenas de escape (topcoat, banda magnética) de la sección de
-   escapes de esa misma guía a `src/CarnetPrintService/escapes.json`.
-   Mientras ese archivo tenga las cadenas vacías, el servicio **rechaza**
-   los trabajos que pidan banda magnética o topcoat personalizado con un
-   mensaje claro, en vez de imprimir mal.
-4. Probar primero con la tapa abierta y sin cinta, para ver que la tarjeta
-   se mueve donde se espera antes de gastar material.
+## Puente de Entrust (`bridge/CardBridge`)
 
-**Zebra (`Printing/ZebraCardDriver.cs`)**
-1. Hay dos candidatos sin resolver: el paquete NuGet
-   `Zebra.Printer.Card.SDK` (2018, .NET Framework 4.7.1 — probablemente
-   incompatible con .NET 8 sin recompilar el servicio) y el SDK Link-OS que
-   la propia documentación de Zebra usa para el ZC300
-   (`developer.zebra.com/content/zc300-link-os-sdk-encode-data`). Hay que
-   instalar el que Zebra entregue para el ZC300 y ver cuál ensamblado trae.
-2. Confirmar si ese SDK cubre gráficos de cara completa y dúplex, o solo
-   banda magnética / tarjeta inteligente — la documentación pública no lo
-   aclara.
-3. Zebra Browser Print (la vía que habría evitado este servicio del todo)
-   está documentado para impresoras de código de barras, no para la serie
-   ZC; no se investigó más a fondo porque habría significado adivinar.
+Programa .NET 8 (WPF/WinForms) que usa los fuentes del *XPS Card Printer SDK v8.8* (`bridge/CardBridge/EntrustSdk/`, COM
+`IBidiSpl`): `BindDevice` → estado → `StartJob` → `PrintDocument` + Print Ticket → `EndJob` → sondeo hasta `JobSucceeded`.
+El trabajo pasa a `printed` solo cuando la impresora confirma que la tarjeta salió; los errores del equipo (sin tarjetas,
+cinta, atasco) cancelan el trabajo y quedan en `error` con una instrucción para el operador (`app/printers/errors.py`).
 
-Hasta que los dos puntos anteriores se resuelvan, `/printers` reporta el
-driver como disponible pero con un `reason` que explica que se está usando
-el spooler, y cualquier trabajo con banda magnética simplemente falla con
-un mensaje — nunca se manda a ciegas.
+- Opciones por trabajo vía Print Ticket: giro por cara, topcoat, desactivar una cara, tolva, calidad (`print_mode`,
+  `color_dpi`, `mono_dpi`), split ribbon.
+- DS3 de desarrollo: Sigma DS3IDRD, 300 ppp, cinta YMCKT, dúplex automático, sin banda magnética ni laminador.
+- Convención del puente: `status` y `print --front F --back B …`; una línea JSON en stdout con `ok` y `printerJobId`.
+- `Commit()` del Print Ticket cambia las preferencias del driver en esa PC; el SDK está pensado para eso.
+- El SDK no trae un ensamblado: son fuentes C# (con copyright de Datacard/Entrust), copiadas sin modificar.
 
-## Cómo seguir desde aquí
+## Empaquetado
 
-El código no se escribió para funcionar a la primera contra el hardware
-real — eso habría significado inventar nombres de métodos de un SDK que no
-tengo instalado, y un trabajo de impresión que "funciona" con una llamada
-inventada es peor que uno que avisa que le falta algo. Se escribió para que:
-
-- la mejora real (medida exacta, sin depender del navegador) funcione hoy
-  mismo con el spooler, y
-- el camino para añadir banda magnética / topcoat cuando se tenga el SDK
-  en la mano sea mecánico: llenar los `TODO(SDK)` y las cadenas de
-  `escapes.json`, sin tocar el resto del servicio.
-
-Cuando se verifiquen los nombres reales del ensamblado (con Visual Studio y
-la impresora conectada), lo normal es que cada `TODO(SDK)` se convierta en
-dos o tres líneas de llamada directa — el resto del flujo (cola, contrato
-HTTP, respaldo en el navegador) no debería cambiar.
+`build-exe.ps1` → `dist\CarnetPrint.exe` (PyInstaller, un solo archivo con la web dentro) + `dist\bridge\`.
+`installer/CarnetPrint.iss` (Inno Setup) los junta con el .NET Desktop Runtime y la opción del driver de Entrust.
+El workflow de GitHub Actions hace todo y publica el release; ver el README.

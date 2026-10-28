@@ -1,7 +1,6 @@
-Instalar-SQLServer-Developer.ps1
-
 # Secretos y configuración local (el .exe crea .env y printers.yaml en su primera ejecución)
 .env
+printers.yaml
 
 # Entornos y cachés de Python
 .venv/
@@ -18,6 +17,8 @@ obj/
 bridge/zbin/
 build/
 dist/
+app/_build_version.py
+installer/deps/
 
 # Datos que el .exe guarda junto a sí mismo
 templates.json
@@ -25,8 +26,8 @@ carnets.json
 settings.json
 clients.json
 png/
+images/
 
-# Software y documentación de terceros: se descarga, no se redistribuye (ver HANDOFF.md)
+# Software y documentación de terceros: se descarga, no se redistribuye
 windows-drivers/
 docs/*.pdf
-installer/deps/
