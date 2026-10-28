@@ -78,6 +78,12 @@ solo se incrusta en la página si se abre desde la misma PC.
 
 Los datos de un navegador que usaba IndexedDB se suben solos al .exe la primera vez que se abre la UI.
 
+## Qué no está en el repo
+
+- **Drivers e instaladores** (Entrust XPS 8.8, Zebra): se descargan desde los enlaces de `HANDOFF.md`; no se redistribuyen.
+- **Binarios compilados** (`bridge/bin`, `bridge/zbin`, `obj/`): salen de `build-exe.ps1` o `bridge\build.ps1`.
+- **Secretos**: `.env` no se versiona. El `.exe` lo crea con una API key aleatoria; en desarrollo, copia `.env.example` a `.env`.
+
 ## Pendientes / siguiente paso
 
 - Probar cinta Hologram y cinta de seguridad con tarjeta real.

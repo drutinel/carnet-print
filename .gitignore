@@ -1,11 +1,31 @@
 Instalar-SQLServer-Developer.ps1
 
-# Datos junto al .exe y artefactos de empaquetado
-templates.json
-carnets.json
+# Secretos y configuración local (el .exe crea .env y printers.yaml en su primera ejecución)
+.env
+
+# Entornos y cachés de Python
+.venv/
+.venv-build/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+
+# Salida de compilación (se regenera con build-exe.ps1 / bridge\build.ps1)
+bin/
+obj/
+bridge/zbin/
 build/
 dist/
-.venv-build/
+
+# Datos que el .exe guarda junto a sí mismo
+templates.json
+carnets.json
 settings.json
 clients.json
 png/
+
+# Software y documentación de terceros: se descarga, no se redistribuye (ver HANDOFF.md)
+windows-drivers/
+docs/*.pdf
