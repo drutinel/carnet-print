@@ -23,6 +23,8 @@ concurrency:
   group: build-exe-${{ github.ref }}
   cancel-in-progress: true
 
+# OJO: no llamar VERSION a una variable de entorno de un paso que corra `dotnet`: MSBuild toma las variables de
+# entorno como propiedades, `VERSION=v0.2.7` pisa `$(Version)` y NuGet falla al restaurar (versión inválida).
 jobs:
   build:
     runs-on: windows-latest
@@ -77,13 +79,13 @@ jobs:
       - name: Compilar (puente .NET + PyInstaller)
         shell: pwsh
         env:
-          VERSION: ${{ steps.ver.outputs.version }}
-        run: ./build-exe.ps1 -Version $env:VERSION
+          CARNET_VERSION: ${{ steps.ver.outputs.version }}
+        run: ./build-exe.ps1 -Version $env:CARNET_VERSION
 
       - name: Probar que el .exe arranca, sirve la web y responde el API
         shell: pwsh
         env:
-          VERSION: ${{ steps.ver.outputs.version }}
+          CARNET_VERSION: ${{ steps.ver.outputs.version }}
         run: |
           $dir = Join-Path $env:RUNNER_TEMP "smoke"
           New-Item -ItemType Directory $dir | Out-Null
@@ -107,7 +109,7 @@ jobs:
               if ((Invoke-WebRequest "http://127.0.0.1:8787/ui/$f" -UseBasicParsing).StatusCode -ne 200) { throw "Falta $f dentro del .exe" }
             }
             $health = Invoke-RestMethod http://127.0.0.1:8787/health
-            if ($health.version -ne $env:VERSION) { throw "Versión del .exe: '$($health.version)', se esperaba '$env:VERSION'" }
+            if ($health.version -ne $env:CARNET_VERSION) { throw "Versión del .exe: '$($health.version)', se esperaba '$env:CARNET_VERSION'" }
             # El API de verdad: alta de un carnet con la API key que el programa generó
             $key = ((Get-Content (Join-Path $dir ".env") | Where-Object { $_ -match "^CARDPRINT_API_KEY=" }) -replace "^CARDPRINT_API_KEY=", "").Trim()
             $card = Invoke-RestMethod -Method Post http://127.0.0.1:8787/cards -Headers @{ "X-API-Key" = $key } `
@@ -122,7 +124,7 @@ jobs:
       - name: Instalador (Inno Setup, con .NET 8 Desktop Runtime incluido)
         shell: pwsh
         env:
-          VERSION: ${{ steps.ver.outputs.version }}
+          CARNET_VERSION: ${{ steps.ver.outputs.version }}
         run: |
           New-Item -ItemType Directory installer\deps -Force | Out-Null
           $dep = "installer\deps\windowsdesktop-runtime-win-x64.exe"
@@ -133,7 +135,7 @@ jobs:
           }
           $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
           if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; if ($LASTEXITCODE -ne 0) { throw "No se pudo instalar Inno Setup" } }
-          $v = $env:VERSION.TrimStart("v")
+          $v = $env:CARNET_VERSION.TrimStart("v")
           if ($v -notmatch '^\d+\.\d+\.\d+$') { $v = "0.0.0" }   # compilaciones dev-<sha>
           & $iscc "/DAppVersion=$v" installer\CarnetPrint.iss
           if ($LASTEXITCODE -ne 0) { throw "ISCC falló ($LASTEXITCODE)" }
