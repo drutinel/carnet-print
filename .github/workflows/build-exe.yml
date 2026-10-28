@@ -99,6 +99,39 @@ jobs:
             Get-Content (Join-Path $dir "out.log"), (Join-Path $dir "err.log") -ErrorAction SilentlyContinue
           }
 
+      - name: Instalador (Inno Setup, con .NET 8 Desktop Runtime incluido)
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          New-Item -ItemType Directory installer\deps -Force | Out-Null
+          $dep = "installer\deps\windowsdesktop-runtime-win-x64.exe"
+          Invoke-WebRequest "https://aka.ms/dotnet/8.0/windowsdesktop-runtime-win-x64.exe" -OutFile $dep
+          $sig = Get-AuthenticodeSignature $dep
+          if ($sig.Status -ne "Valid" -or $sig.SignerCertificate.Subject -notmatch "O=Microsoft Corporation") {
+            throw "El instalador de .NET no tiene una firma válida de Microsoft ($($sig.Status))"
+          }
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) { choco install innosetup -y --no-progress; if ($LASTEXITCODE -ne 0) { throw "No se pudo instalar Inno Setup" } }
+          $v = $env:VERSION.TrimStart("v")
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { $v = "0.0.0" }   # compilaciones dev-<sha>
+          & $iscc "/DAppVersion=$v" installer\CarnetPrint.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC falló ($LASTEXITCODE)" }
+          "INSTALLER=dist\CarnetPrint-Setup-$v.exe" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Probar el instalador (instalación silenciosa)
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP "instalado"
+          $log = Join-Path $env:RUNNER_TEMP "inno.log"
+          $p = Start-Process $env:INSTALLER -Wait -PassThru -ArgumentList `
+                 "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", "/DIR=$target", "/MERGETASKS=!entrustdriver,!desktopicon", "/LOG=$log"
+          if ($p.ExitCode -ne 0) { Get-Content $log -Tail 40; throw "El instalador terminó con código $($p.ExitCode)" }
+          foreach ($f in "CarnetPrint.exe", "bridge\CardBridge.exe") {
+            if (-not (Test-Path (Join-Path $target $f))) { throw "El instalador no copió $f" }
+          }
+          Write-Host "OK: instalado en $target"
+
       - name: Armar el zip
         shell: pwsh
         run: |
@@ -110,6 +143,13 @@ jobs:
         with:
           name: CarnetPrint-win-x64
           path: ${{ env.ZIP_NAME }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: CarnetPrint-Setup
+          path: ${{ env.INSTALLER }}
           if-no-files-found: error
           retention-days: 30
 
@@ -141,6 +181,6 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
           SHA: ${{ github.sha }}
         run: |
-          gh release create "$VERSION" artifacts/CarnetPrint-win-x64/*.zip artifacts/CarnetPrint.exe/CarnetPrint.exe \
+          gh release create "$VERSION" artifacts/CarnetPrint-Setup/*.exe artifacts/CarnetPrint-win-x64/*.zip artifacts/CarnetPrint.exe/CarnetPrint.exe \
             --target "$SHA" --title "CarnetPrint $VERSION" \
             --notes-file .github/release-notes.md --generate-notes

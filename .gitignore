@@ -29,3 +29,4 @@ png/
 # Software y documentación de terceros: se descarga, no se redistribuye (ver HANDOFF.md)
 windows-drivers/
 docs/*.pdf
+installer/deps/

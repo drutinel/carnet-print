@@ -20,8 +20,11 @@ con el enlace de descarga y un botón «Volver a comprobar». No descarga ni ins
 
 ## Uso
 
-1. Copia `CarnetPrint.exe` y la carpeta `bridge\` juntas a cualquier carpeta de la PC.
-2. Doble clic. Se abre el navegador en `http://localhost:8787/ui/generador-carnets.html`.
+**Instalador (recomendado):** ejecuta `CarnetPrint-Setup-<versión>.exe` de la [última release](https://github.com/drutinel/carnet-print/releases/latest). Copia el programa a `C:\CarnetPrint`, instala el .NET 8 Desktop Runtime si falta (incluido, sin internet) y ofrece instalar el driver XPS de Entrust. No borra tus datos al desinstalar.
+
+**A mano:** copia `CarnetPrint.exe` **y la carpeta `bridge\` juntos** a una carpeta de la PC (solo el `.exe` no basta: avisará que falta `CardBridge.exe`).
+
+1. Doble clic. Se abre el navegador en `http://localhost:8787/ui/generador-carnets.html`.
 3. La primera vez se crean, junto al `.exe`, `.env` (con una **API key aleatoria**, también impresa en consola)
    y `printers.yaml` (con la DS3). Si la Windows llama distinto a la impresora, edita `printer_name`.
 4. Toca la tarjeta para escribir nombre, cédula y categoría; sube la foto; **Generar, registrar e imprimir**.
@@ -77,7 +80,7 @@ Compilar el `.exe` **solo se puede en Windows** (PyInstaller no compila para otr
 powershell -ExecutionPolicy Bypass -File build-exe.ps1   # necesita Python 3.11+ y .NET SDK 8
 ```
 
-Genera `dist\CarnetPrint.exe` y `dist\bridge\`.
+Genera `dist\CarnetPrint.exe` y `dist\bridge\`. El instalador (`installer\CarnetPrint.iss`, Inno Setup 6.1+) se compila en el workflow, que además descarga el .NET Desktop Runtime y verifica su firma de Microsoft.
 
 ### Compilar con GitHub Actions (sin PC Windows)
 
@@ -91,7 +94,7 @@ Genera `dist\CarnetPrint.exe` y `dist\bridge\`.
 - **Pull requests a `main`:** compilan y prueban, sin publicar.
 - **Manual:** *Actions > Build CarnetPrint.exe > Run workflow*; el zip y el `.exe` quedan como artefactos 30 días.
 
-Cada Release trae `CarnetPrint-<versión>-win-x64.zip` (`CarnetPrint.exe` + `bridge\`), el `.exe` suelto y las notas de
+Cada Release trae `CarnetPrint-Setup-<versión>.exe` (instalador), `CarnetPrint-<versión>-win-x64.zip` (`CarnetPrint.exe` + `bridge\`), el `.exe` suelto y las notas de
 `.github/release-notes.md` con los requisitos de la PC.
 
 Los minutos los paga el dueño del repo (gratis si es público). El build no prueba la impresión: eso requiere la DS3
