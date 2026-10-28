@@ -8,7 +8,7 @@ const canEdit=bindId=>!KIOSK || [...EDITABLE].some(f=>FIELD_INPUT[f]===bindId);
 if(KIOSK) document.body.classList.add("kiosk");
 const $ = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
-const {esc,digits,fmtCed,validCed,todayISO,addValidity,fmtDate,slug,resolveLayout,getPath,setPath,fieldsWidth,fitField}=window.CarnetLib;   // funciones puras: web/lib.js
+const {esc,digits,fmtCed,validCed,todayISO,addValidity,fmtDate,slug,resolveLayout,getPath,setPath,fieldsWidth,footerWidth,fitField}=window.CarnetLib;   // funciones puras: web/lib.js
 
 /* ---------- Almacén: API del middleware (templates.json y carnets.json junto al .exe) ---------- */
 async function api(path,opt={}){
@@ -216,13 +216,19 @@ function cardFrontHTML(t,d,preview=false){
   const photo = img.photo
     ? `<img class="photo" style="${photoSize}" src="${img.photo}" alt="">`
     : `<div class="photo ph" style="${photoSize}">FOTO</div>`;
-  const vstyle=f=>`font-size:${f.size}px;${f.bold?"":"font-weight:400;"}`;
   const avail=fieldsWidth(F);
   // Un campo: rótulo + valor. Si el valor no cabe se ajusta según su política (cortar, achicar o varias líneas)
   const field=(key,value,bindId)=>{
     const f=F.fields[key], fit=fitField(value||"—",f,avail,measureText);
     const style=`font-size:${fit.size}px;${f.bold?"":"font-weight:400;"}${fit.lines>1?`--lines:${fit.lines};`:""}`;
     return `<div class="fld"><div class="k kblack">${esc(f.label)}</div><div class="v${fit.lines>1?" multi":""} kblack" style="${style}" data-bind="${bindId}">${esc(value)||"—"}</div></div>`;
+  };
+  // Pie: 3 columnas iguales; el valor baja de tamaño si no cabe, igual que los campos
+  const availFoot=footerWidth(F);
+  const foot=(key,value,bindId,cls="")=>{
+    const f=F.footer[key], fit=fitField(value,f,availFoot,measureText);
+    const bind=bindId?` data-bind="${bindId}"`:"", ink=key==="code"?"":" kblack";
+    return `<div class="fld${cls}"><div class="k kblack">${esc(f.label)}</div><div class="v${ink}" style="font-size:${fit.size}px;${f.bold?"":"font-weight:400;"}"${bind}>${esc(value)}</div></div>`;
   };
   const seal = sealImg(t) ? `<div class="seal" style="${sealStyle(t)}"></div>` : "";
   const logo=(k,id,label)=>img[k]
@@ -239,19 +245,19 @@ function cardFrontHTML(t,d,preview=false){
         <span class="ctitle" style="${titleStyles(t).title}" data-bind="t-title">${esc(t.title)||"Carnet"}</span></div>
       <div class="bandside right">${l2}</div>
     </div>
-    <div class="front-body" style="padding:${m.top}px ${m.right}px ${m.bottom}px ${m.left}px;gap:${F.gap}px">${photo}
-      <div class="fields">
-        ${field("name",d.name,"d-name")}
-        ${field("ced",d.ced,"d-ced")}
-        ${field("cat",d.cat,"d-cat")}
-        ${d.extra||(preview&&canEdit("d-extra"))?field("extra",d.extra,"d-extra"):""}
-        <div class="footer">
-          <div class="dates">
-            <div class="fld"><div class="k kblack">${esc(F.footer.issue.label)}</div><div class="v kblack" style="${vstyle(F.footer.issue)}">${fmtDate(d.issue)}</div></div>
-            <div class="fld"><div class="k kblack">${esc(F.footer.expiry.label)}</div><div class="v kblack" style="${vstyle(F.footer.expiry)}">${fmtDate(d.expiry)}</div></div>
-          </div>
-          <div class="code"><div class="k kblack">${esc(F.footer.code.label)}</div><div class="v" style="${vstyle(F.footer.code)}" data-bind="d-code">${esc(d.code)||"—"}</div></div>
+    <div class="front-body" style="padding:${m.top}px ${m.right}px ${m.bottom}px ${m.left}px">
+      <div class="main" style="gap:${F.gap}px">${photo}
+        <div class="fields">
+          ${field("name",d.name,"d-name")}
+          ${field("ced",d.ced,"d-ced")}
+          ${field("cat",d.cat,"d-cat")}
+          ${d.extra||(preview&&canEdit("d-extra"))?field("extra",d.extra,"d-extra"):""}
         </div>
+      </div>
+      <div class="footer">
+        ${foot("issue",fmtDate(d.issue),"")}
+        ${foot("expiry",fmtDate(d.expiry),"")}
+        ${foot("code",d.code||"—","d-code"," code")}
       </div>
     </div></div>`;
 }

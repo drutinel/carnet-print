@@ -59,14 +59,14 @@
 
   /* ---------- Layout de la tarjeta (rótulos, tamaños, ajuste de texto, márgenes) ---------- */
   const CARD_W = 342.4;   // 85.6 mm a 4 px/mm
-  const FIELD = { size: 12, bold: true, fit: "clip", maxLines: 2, minSize: 8 };
+  const FIELD = { size: 12, bold: true, fit: "shrink", maxLines: 2, minSize: 8 };
   const DEFAULT_LAYOUT = Object.freeze({
     front: {
       margins: { top: 9, right: 12, bottom: 9, left: 12 },
-      gap: 10,
+      gap: 14,
       photo: { width: 88, height: 108 },
       fields: {
-        name: { ...FIELD, label: "Nombre", size: 13 },
+        name: { ...FIELD, label: "Nombre" },
         ced: { ...FIELD, label: "Cédula" },
         cat: { ...FIELD, label: "Categoría" },
         extra: { ...FIELD, label: "—" },
@@ -105,6 +105,10 @@
   /** Ancho (px) que le queda al texto de los campos del frente, junto a la foto. */
   const fieldsWidth = front => CARD_W - front.margins.left - front.margins.right - front.photo.width - front.gap;
 
+  /** Ancho (px) de cada una de las 3 columnas del pie (separación = FOOTER_GAP, la misma de app.css). */
+  const FOOTER_GAP = 10;
+  const footerWidth = front => (CARD_W - front.margins.left - front.margins.right - 2 * FOOTER_GAP) / 3;
+
   /** Parte `text` en líneas de a lo más `maxWidth` (por palabras). `measure(texto)` -> ancho. */
   function wrapLines(text, maxWidth, measure) {
     const lines = [];
@@ -141,6 +145,6 @@
 
   return {
     esc, digits, fmtCed, validCed, todayISO, isoDate, addValidity, fmtDate, slug,
-    CARD_W, DEFAULT_LAYOUT, resolveLayout, getPath, setPath, fieldsWidth, wrapLines, fitField,
+    CARD_W, DEFAULT_LAYOUT, resolveLayout, getPath, setPath, fieldsWidth, footerWidth, wrapLines, fitField,
   };
 });

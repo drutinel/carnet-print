@@ -133,11 +133,12 @@
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
   .card .band .org.long{font-size:10px}
   .card .band .ctitle{font-size:9.5px;opacity:.9;text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
-  .card .front-body{position:relative;z-index:1;display:flex}   /* padding y gap salen del layout */
+  .card .front-body{position:relative;z-index:1;display:flex;flex-direction:column;box-sizing:border-box;height:calc(100% - 52px)}   /* padding y gap salen del layout */
+  .card .main{display:flex;min-height:0}
   .card .photo{width:88px;height:108px;border:2px solid var(--card-accent);border-radius:6px;
     object-fit:cover;background:#eef1f5;flex:0 0 auto}
   .card .photo.ph{display:flex;align-items:center;justify-content:center;color:#9aa4b2;font-size:10px}
-  .card .fields{flex:1;min-width:0;display:flex;flex-direction:column}
+  .card .fields{flex:1;min-width:0;display:flex;flex-direction:column;justify-content:space-between}
   .card .fld{margin-bottom:3px}
   .card .fld .k{font-size:8.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#4b5563;line-height:1.1}
   .card .fld .v{font-size:12px;font-weight:650;color:var(--card-ink);line-height:1.12;white-space:nowrap;
@@ -146,11 +147,10 @@
   .card .fld .v.multi{white-space:normal;display:-webkit-box;-webkit-line-clamp:var(--lines,2);-webkit-box-orient:vertical;word-break:break-word}
   /* Datos que van por el panel K (negro resina): negro puro, ver rasterizeFace */
   .card .kblack,.card .fld .v.kblack{color:#000}
-  .card .footer{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:auto;padding-top:2px}
-  .card .dates{display:flex;gap:12px;min-width:0;flex:1 1 auto}
-  .card .code{text-align:left;flex:0 0 auto;white-space:nowrap}
-  .card .code .k{font-size:8.5px;font-weight:700;color:#4b5563;text-transform:uppercase}
-  .card .code .v{font-size:12px;font-weight:700;color:var(--card-accent);letter-spacing:.04em}
+  .card .footer{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:auto;padding-top:2px}
+  .card .footer .fld{margin-bottom:0;min-width:0}
+  .card .code{white-space:nowrap}
+  .card .code .v{color:var(--card-accent);letter-spacing:.04em}
   /* Reverso */
   .card.back{display:flex;flex-direction:column}   /* padding sale del layout */
   .card.back>:not(.seal){position:relative;z-index:1}   /* el sello (marca de agua) va detrás del contenido */

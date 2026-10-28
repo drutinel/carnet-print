@@ -85,7 +85,7 @@ test("getPath / setPath son inmutables", () => {
 
 test("fieldsWidth: lo que queda junto a la foto", () => {
   const f = L.resolveLayout({}).front;
-  assert.ok(Math.abs(L.fieldsWidth(f) - (342.4 - 12 - 12 - 88 - 10)) < 1e-9);
+  assert.ok(Math.abs(L.fieldsWidth(f) - (342.4 - 12 - 12 - 88 - 14)) < 1e-9);
   assert.ok(L.fieldsWidth({ ...f, margins: { ...f.margins, left: 4, right: 4 } }) > L.fieldsWidth(f));   // menos margen, más ancho
 });
 
@@ -118,4 +118,20 @@ test("fitField wrap usa varias líneas y baja la letra solo si hace falta", () =
   assert.equal(r.size, 12);   // en 2 líneas cabe sin achicar
   const small = L.fitField("DIRECTOR CENTRAL DE INTELIGENCIA MILITAR NACIONAL", f, 100, fake);
   assert.ok(small.size < 12 && small.size >= 8);
+});
+
+test("footerWidth: el pie reparte el ancho útil en 3 columnas iguales", () => {
+  const f = L.resolveLayout({}).front;
+  assert.ok(Math.abs(L.footerWidth(f) - (342.4 - 12 - 12 - 20) / 3) < 1e-9);
+});
+
+test("el layout por defecto ajusta la letra en vez de cortar con «…»", () => {
+  const { fields, footer } = L.resolveLayout({}).front;
+  for (const f of [...Object.values(fields), ...Object.values(footer)]) assert.equal(f.fit, "shrink");
+});
+
+test("el layout por defecto usa un solo tamaño de letra en campos y pie", () => {
+  const { fields, footer } = L.resolveLayout({}).front;
+  const sizes = new Set([...Object.values(fields), ...Object.values(footer)].map(f => f.size));
+  assert.deepEqual([...sizes], [12]);
 });
