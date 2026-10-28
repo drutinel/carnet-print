@@ -183,3 +183,4 @@
   /* ---- Impresión ---- */
   body.kiosk .admin-only{display:none!important}
   @media (max-width:860px){.wrap,.top{grid-template-columns:1fr}.sticky{position:static}}
+  #printer-chip[data-state=busy]{color:var(--warn);border-color:rgba(245,158,11,.4)}
