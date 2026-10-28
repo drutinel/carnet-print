@@ -14,6 +14,16 @@ from .status import StatusCache
 from .store import Conflict, NotFound, Store, StoreError
 
 
+class RevalidatedStatic(StaticFiles):
+    """Archivos de la web que el navegador revalida siempre (ETag): tras actualizar el programa no
+    se queda con un app.js viejo en caché mezclado con un HTML nuevo."""
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 def build_ctx(settings: Settings) -> Ctx:
     """Impresoras, cola de trabajos y almacén: lo comparten el servidor y la línea de comandos."""
     registry = build_registry(load_printers(settings.printers_file))
@@ -67,5 +77,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     web_dir = pages.WEB_DIR
     if web_dir.is_dir():  # css y js de la UI, mismo origen: sin CORS ni API URL manual
-        app.mount("/ui", StaticFiles(directory=web_dir), name="ui")
+        app.mount("/ui", RevalidatedStatic(directory=web_dir), name="ui")
     return app

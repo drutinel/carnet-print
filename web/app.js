@@ -301,6 +301,7 @@ function enableInlineEdit(){
     const field=$("#"+el.dataset.bind); if(!field) return;
     if(!canEdit(field.id)){ el.removeAttribute("data-bind"); return; }
     el.contentEditable="plaintext-only";
+    if(el.dataset.bind.startsWith("t-")) el.tabIndex=-1;   // fuera del recorrido con Tab (se edita con clic)
     el.spellcheck=false;
     el.title="Toca para editar";
     if(!field.value.trim()){
@@ -318,6 +319,33 @@ function inlineCommit(el){
   if(field.value!==v){ field.value=v; field.dispatchEvent(new Event("input",{bubbles:true})); }
   else render();
 }
+/* ---------- Tab entre los campos ----------
+   Orden: Nombre → Cédula → Categoría → Dato extra → Código → Fecha de emisión → Foto → botón de imprimir
+   (Mayús+Tab al revés). Los textos del diseño (organización, leyenda…) no entran en el recorrido: se editan con clic. */
+const TAB_FLOW=["d-name","d-ced","d-cat","d-extra","d-code"];
+const TAB_AFTER=["#d-issue","#d-photo","#generate"];   // lo que sigue a la tarjeta
+const TAB_BEFORE=["#open-adv","#tpl-select"];          // lo que hay antes de la tarjeta
+const cardField=b=>$(`#pv-front [data-bind="${b}"]`);
+const usable=el=>el && !el.disabled && !el.closest("[hidden]") && el.getClientRects().length>0;
+const firstUsable=sels=>sels.map(q=>$(q)).find(usable);
+function tabFrom(bind,backwards){
+  if(bind.startsWith("d-")){
+    const present=TAB_FLOW.filter(b=>cardField(b));
+    const next=present[present.indexOf(bind)+(backwards?-1:1)];
+    if(next) return cardField(next).focus();
+    const outside=firstUsable(backwards?TAB_BEFORE:TAB_AFTER);
+    return outside?outside.focus():cardField(bind)?.focus();
+  }
+  // textos del diseño (solo se llega a ellos con clic): recorren su propia lista, sin quedarse atrapado
+  const own=[...$$("#pv-front [data-bind^='t-'], #pv-back [data-bind^='t-']")];
+  const i=own.findIndex(n=>n.dataset.bind===bind);
+  own[(i+(backwards?-1:1)+own.length)%own.length]?.focus();
+}
+$("#d-issue").addEventListener("keydown",e=>{   // Mayús+Tab desde la fecha vuelve al último campo de la tarjeta
+  if(e.key!=="Tab" || !e.shiftKey) return;
+  const last=[...TAB_FLOW].reverse().map(cardField).find(Boolean);
+  if(last){ e.preventDefault(); last.focus(); }
+});
 ["#pv-front","#pv-back"].forEach(sel=>{
   const host=$(sel);
   host.addEventListener("focusin",e=>{
@@ -335,12 +363,11 @@ function inlineCommit(el){
     const multiline=$("#"+el.dataset.bind)?.tagName==="TEXTAREA";
     if(e.key==="Enter" && !(multiline && e.shiftKey)){ e.preventDefault(); el.blur(); }
     if(e.key==="Tab"){
-      // Al salir se redibuja la tarjeta; se enfoca el texto siguiente/anterior por posición.
+      // Al salir se redibuja la tarjeta (se pierde el elemento), así que se enfoca el siguiente DESPUÉS de guardar.
       e.preventDefault();
-      const sel="#pv-front [data-bind], #pv-back [data-bind]";
-      const i=[...$$(sel)].indexOf(el)+(e.shiftKey?-1:1);
+      const bind=el.dataset.bind, backwards=e.shiftKey;
       el.blur();
-      const next=[...$$(sel)][i]; if(next) next.focus();
+      tabFrom(bind,backwards);
     }
     if(e.key==="Escape"){ e.preventDefault(); el.removeAttribute("data-bind"); el.blur(); render(); }
   });
@@ -1053,8 +1080,8 @@ function setupKiosk(){
   }
 })();
 $("#open-adv").addEventListener("click",()=>{ $("#advanced").open=true; });
-})();
 $("#reg-body").addEventListener("keydown",e=>{
   const row=e.target.closest("tr[data-edit]");
   if(row && e.key==="Enter" && e.target===row){ e.preventDefault(); editCard(row.dataset.edit); }
 });
+})();

@@ -403,3 +403,17 @@ def test_an_edited_card_still_round_trips_through_backup_restore(client):
     client.patch(f"/cards/{control}", json=card_body("Ana B"), headers=KEY)
     backup = client.get("/cards?full=true", headers=KEY).json()[0]
     assert client.put("/cards/C-000900", json=backup, headers=KEY).status_code == 200
+
+
+def test_web_files_are_revalidated_so_an_update_never_mixes_old_and_new(client):
+    res = client.get("/ui/app.js")
+    assert res.status_code == 200 and res.headers["cache-control"] == "no-cache" and res.headers.get("etag")
+    assert client.get("/ui/app.js", headers={"If-None-Match": res.headers["etag"]}).status_code == 304
+
+
+def test_pages_ask_for_assets_by_version(client):
+    page = client.get("/ui/generador-carnets.html").text
+    from app.version import VERSION
+    for asset in ("/ui/app.css", "/ui/lib.js", "/ui/app.js"):
+        assert f'"{asset}?v={VERSION}"' in page
+    assert client.get(f"/ui/app.js?v={VERSION}").status_code == 200   # la consulta no estorba al archivo

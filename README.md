@@ -32,6 +32,7 @@ Si falta algo, el programa lo avisa **al abrir** (consola y aviso amarillo en la
 2. La primera vez se crean junto al `.exe` el `.env` (con una **API key aleatoria**) y `printers.yaml`. Si Windows llama
    distinto a la impresora, edita `printer_name` en `printers.yaml`.
 3. Toca la tarjeta para escribir nombre, cédula y categoría; sube la foto; **Generar, registrar e imprimir**.
+   **Tab** pasa al siguiente campo (Nombre → Cédula → Categoría → Dato extra → Código → Fecha de emisión) y **Mayús+Tab** vuelve al anterior.
    El servidor asigna el número de control y el código.
 
 La web abierta desde esa misma PC ya trae la clave; desde otra máquina te la pide (está en `.env`).

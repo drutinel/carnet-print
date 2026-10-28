@@ -1,4 +1,5 @@
 import json
+import re
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import HTMLResponse, Response
@@ -7,6 +8,7 @@ from ..ctx import Ctx
 from ..deps import get_ctx
 from ..paths import resource_dir
 from ..schemas import ItemId
+from ..version import VERSION
 
 router = APIRouter()
 WEB_DIR = resource_dir() / "web"
@@ -27,7 +29,10 @@ def render_page(boot: dict, kiosk: dict | None = None) -> HTMLResponse:
     inject = "<script>" + data.replace("</", "<\\/") + "</script>\n"
     page = (WEB_DIR / "generador-carnets.html").read_text(encoding="utf-8")
     marker = '<script src="/ui/app.js"'
-    return HTMLResponse(page.replace(marker, inject + marker, 1), headers={"Cache-Control": "no-store"})
+    page = page.replace(marker, inject + marker, 1)
+    # La versión en la URL de css/js: al actualizar el programa el navegador nunca usa un archivo viejo en caché
+    page = re.sub(r'((?:src|href)="/ui/(?:app|lib)\.(?:js|css))"', rf'\1?v={VERSION}"', page)
+    return HTMLResponse(page, headers={"Cache-Control": "no-store"})
 
 
 @router.get("/ui/generador-carnets.html", response_class=HTMLResponse, include_in_schema=False)
