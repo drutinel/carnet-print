@@ -121,19 +121,19 @@
   /* Tarjeta real: 85.6 x 54 mm. 342.4px = 85.6mm a 4px/mm en preview */
   .card{width:342.4px;height:216px;position:relative;background:var(--card-bg);
     color:var(--card-ink);font-family:Arial,Helvetica,sans-serif;overflow:hidden}
-  .card .seal{position:absolute;inset:-30%;pointer-events:none;background-repeat:repeat;
+  .card .seal{position:absolute;z-index:0;inset:-30%;pointer-events:none;background-repeat:repeat;
     background-position:center;transform:rotate(-22deg)}
-  .card .band{height:52px;background:var(--card-band);color:#fff;display:flex;align-items:center;
+  .card .band{position:relative;z-index:1;height:52px;background:var(--card-band);color:#fff;display:flex;align-items:center;
     gap:8px;padding:0 10px}
   .card .band .bandside{flex:0 0 auto;display:flex;align-items:center;gap:6px;min-width:40px}
   .card .band .bandside.right{justify-content:flex-end}
-  .card .band img{height:34px;width:auto;object-fit:contain}
+  .card .band img{height:44px;width:auto;object-fit:contain}
   .card .band .titles{flex:1;display:flex;flex-direction:column;line-height:1.12;text-align:center;min-width:0}
   .card .band .org{font-size:12px;font-weight:700;letter-spacing:.02em;line-height:1.08;
     display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-word}
   .card .band .org.long{font-size:10px}
   .card .band .ctitle{font-size:9.5px;opacity:.9;text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
-  .card .front-body{display:flex}   /* padding y gap salen del layout */
+  .card .front-body{position:relative;z-index:1;display:flex}   /* padding y gap salen del layout */
   .card .photo{width:88px;height:108px;border:2px solid var(--card-accent);border-radius:6px;
     object-fit:cover;background:#eef1f5;flex:0 0 auto}
   .card .photo.ph{display:flex;align-items:center;justify-content:center;color:#9aa4b2;font-size:10px}
@@ -148,11 +148,12 @@
   .card .kblack,.card .fld .v.kblack{color:#000}
   .card .footer{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:auto;padding-top:2px}
   .card .dates{display:flex;gap:12px;min-width:0;flex:1 1 auto}
-  .card .code{text-align:right;flex:0 0 auto;white-space:nowrap}
+  .card .code{text-align:left;flex:0 0 auto;white-space:nowrap}
   .card .code .k{font-size:8.5px;font-weight:700;color:#4b5563;text-transform:uppercase}
   .card .code .v{font-size:12px;font-weight:700;color:var(--card-accent);letter-spacing:.04em}
   /* Reverso */
   .card.back{display:flex;flex-direction:column}   /* padding sale del layout */
+  .card.back>:not(.seal){position:relative;z-index:1}   /* el sello (marca de agua) va detrás del contenido */
   .card.back .legend{font-size:10px;font-weight:600;color:#111418;line-height:1.35;white-space:pre-wrap}
   .card.back .sign{margin-top:auto;display:flex;justify-content:space-between;align-items:flex-end;gap:10px}
   .card.back .sign .box{text-align:center;flex:1}

@@ -175,7 +175,7 @@ def test_server_assigns_control_and_code(client):
     b = client.post("/cards", json=card_body("Beto"), headers=KEY)
     assert a.status_code == b.status_code == 201
     assert (a.json()["control"], b.json()["control"]) == ("C-000001", "C-000002")
-    assert a.json()["data"]["code"] == "GAG-000001"   # código automático con el prefijo de la plantilla
+    assert a.json()["data"]["code"] == "GAG-00001"   # código automático con el prefijo de la plantilla
     assert a.json()["prints"] == 1 and a.json()["voided"] is False
 
 

@@ -227,7 +227,7 @@ class Store:
                 card["templateId"] = template_id
             info = card.setdefault("data", {})
             if not str(info.get("code", "")).strip():
-                info["code"] = f"{card.get('tpl', {}).get('prefix', '')}{number:06d}"
+                info["code"] = f"{card.get('tpl', {}).get('prefix', '')}{number:05d}"
             cards[card["control"]] = card
             created.update(card)
 
