@@ -26,7 +26,7 @@ def render_page(boot: dict, kiosk: dict | None = None) -> HTMLResponse:
     data = "window.BOOT=" + json.dumps(boot) + (";window.KIOSK=" + json.dumps(kiosk) if kiosk else "")
     inject = "<script>" + data.replace("</", "<\\/") + "</script>\n"
     page = (WEB_DIR / "generador-carnets.html").read_text(encoding="utf-8")
-    marker = '<script src="app.js"'
+    marker = '<script src="/ui/app.js"'
     return HTMLResponse(page.replace(marker, inject + marker, 1), headers={"Cache-Control": "no-store"})
 
 

@@ -230,3 +230,12 @@ def test_old_json_with_inline_images_is_compacted_on_start(make_app, tmp_path):
     with TestClient(make_app()) as c:
         assert "base64" not in (tmp_path / "carnets.json").read_text()
         assert c.get("/cards/C-000001", headers=KEY).json()["img"]["photo"] == uri
+
+
+def test_clients_without_token_get_one_on_start(make_app, tmp_path):
+    (tmp_path / "clients.json").write_text(json.dumps({"clients": {"viejo": {
+        "name": "Viejo", "template_id": "a", "editable": ["name"], "show_registry": False}}}))
+    with TestClient(make_app()) as c:
+        stored = json.loads((tmp_path / "clients.json").read_text())["clients"]["viejo"]
+        assert len(stored["token"]) >= 24
+        assert c.get("/c/viejo").status_code == 200

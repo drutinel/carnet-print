@@ -122,7 +122,13 @@ class Store:
         self._clients = JsonFile(data_dir / "clients.json", {"clients": {}})
 
     def compact(self) -> None:
-        """Pasa a `images/` las imágenes que un JSON antiguo aún lleva dentro."""
+        """Pasa a `images/` las imágenes que un JSON antiguo aún lleva dentro y da token a los
+        perfiles de cliente creados antes de que existieran."""
+        def add_tokens(data: dict) -> None:
+            for client in data.get("clients", {}).values():
+                client.setdefault("token", secrets.token_urlsafe(24))
+
+        self._clients.update(add_tokens)
         self._templates.update(lambda d: d.update(self._blobs.externalize(d)))
         self._cards.update(lambda d: d.update(self._blobs.externalize(d)))
 
