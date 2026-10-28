@@ -57,6 +57,8 @@ test("resolveLayout: sin layout son los valores de siempre", () => {
   assert.equal(L2.front.margins.left, 12);
   assert.equal(L2.front.photo.width, 88);
   assert.equal(L2.back.margins.top, 14);
+  assert.equal(L2.front.footer.issue.label, "Emisión");        // sin «Fecha de»: cabe en una línea
+  assert.equal(L2.front.footer.expiry.label, "Expiración");
 });
 
 test("resolveLayout: mezcla solo lo que viene y no modifica nada", () => {

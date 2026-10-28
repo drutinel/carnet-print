@@ -35,8 +35,8 @@ def make_app(tmp_path):
             "printers:\n  - {id: mock, label: Mock, adapter: mock,"
             " allowed_options: {RibbonName: [15Hologram, 0YMCKO], Free: []}}\n"
         )
-        return create_app(Settings(
-            api_key="secret", printers_file=printers, data_dir=tmp_path, max_upload_bytes=200_000, **overrides))
+        options = {"data_dir": tmp_path, "max_upload_bytes": 200_000, **overrides}
+        return create_app(Settings(api_key="secret", printers_file=printers, **options))
     return build
 
 

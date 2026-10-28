@@ -284,3 +284,9 @@ def test_card_keeps_the_layout_it_was_made_with(client):
     body["tpl"] = {**body["tpl"], "layout": LAYOUT}
     control = client.post("/cards", json=body, headers=KEY).json()["control"]
     assert client.get(f"/cards/{control}", headers=KEY).json()["tpl"]["layout"]["front"]["gap"] == 8
+
+
+def test_data_dir_is_created_if_missing(make_app, tmp_path):
+    with TestClient(make_app(data_dir=tmp_path / "nueva" / "carpeta")) as c:
+        assert c.post("/cards", json=card_body(), headers=KEY).status_code == 201
+        assert (tmp_path / "nueva" / "carpeta" / "carnets.json").exists()

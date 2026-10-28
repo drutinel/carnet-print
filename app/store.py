@@ -115,6 +115,7 @@ class Store:
     """
 
     def __init__(self, data_dir: Path):
+        data_dir.mkdir(parents=True, exist_ok=True)   # una carpeta de datos nueva (CARDPRINT_DATA_DIR) también sirve
         self._blobs = ImageBlobs(data_dir / "images")
         self._templates = JsonFile(data_dir / "templates.json", {"active": None, "templates": {}})
         self._cards = JsonFile(data_dir / "carnets.json", {"cards": {}})

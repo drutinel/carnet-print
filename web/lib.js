@@ -72,8 +72,8 @@
         extra: { ...FIELD, label: "—" },
       },
       footer: {
-        issue: { ...FIELD, label: "Fecha de emisión" },
-        expiry: { ...FIELD, label: "Fecha de expiración" },
+        issue: { ...FIELD, label: "Emisión" },
+        expiry: { ...FIELD, label: "Expiración" },
         code: { ...FIELD, label: "Código" },
       },
     },
