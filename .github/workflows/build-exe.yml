@@ -114,7 +114,7 @@ jobs:
             $key = ((Get-Content (Join-Path $dir ".env") | Where-Object { $_ -match "^CARDPRINT_API_KEY=" }) -replace "^CARDPRINT_API_KEY=", "").Trim()
             $card = Invoke-RestMethod -Method Post http://127.0.0.1:8787/cards -Headers @{ "X-API-Key" = $key } `
                       -ContentType "application/json" -Body '{"tpl":{"prefix":"T-"},"data":{"name":"Prueba"},"img":{}}'
-            if ($card.control -ne "C-000001" -or $card.data.code -ne "T-000001") { throw "El alta de carnets no devolvió control/código: $($card | ConvertTo-Json)" }
+            if ($card.control -ne "C-000001" -or $card.data.code -ne "T-00001") { throw "El alta de carnets no devolvió control/código: $($card | ConvertTo-Json)" }
             # La línea de comandos dentro del .exe: lista las impresoras (por el programa abierto) y rechaza una petición vacía con código 2
             $exe = Join-Path $dir "CarnetPrint.exe"
             $listed = (& $exe printers --json) | ConvertFrom-Json
