@@ -128,6 +128,14 @@ class CardIn(Strict):
     templateId: ShortText | None = None
 
 
+class Revision(Strict):
+    """Cómo era un carnet antes de una corrección."""
+
+    at: int = Field(0, ge=0)
+    by: ShortText = ""
+    data: CardData
+
+
 class CardRestore(CardIn):
     """Carnet completo de un respaldo (conserva su control, fecha, reimpresiones y estado)."""
 
@@ -136,6 +144,9 @@ class CardRestore(CardIn):
     createdAt: int = Field(0, ge=0)
     prints: int = Field(1, ge=1)
     voided: bool = False
+    updatedAt: int | None = Field(None, ge=0)
+    updatedBy: ShortText | None = None
+    revisions: list[Revision] | None = Field(None, max_length=20)
 
 
 class DraftIn(Strict):

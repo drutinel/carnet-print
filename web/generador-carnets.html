@@ -67,6 +67,14 @@
         <input type="text" id="d-extra" placeholder="Tipo de sangre, área…"></label>
       <div class="asset" id="photo-asset" data-key="photo" data-label="Foto del titular"></div>
 
+      <div class="edit-banner" id="edit-banner" role="status" hidden>
+        <span id="edit-text"></span>
+        <div class="row">
+          <button class="btn sm" id="edit-as-new" type="button" title="Guarda estos datos como un carnet nuevo, con otro control y otro código">Emitir como carnet nuevo</button>
+          <button class="btn sm" id="edit-cancel" type="button">Cancelar</button>
+        </div>
+      </div>
+
       <div class="actions">
         <button class="btn primary" id="generate" type="button">Generar, registrar e imprimir</button>
         <button class="btn admin-only" id="preview-print" type="button" title="Imprime sin guardar el carnet en el registro">Imprimir sin registrar</button>

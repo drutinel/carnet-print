@@ -25,6 +25,8 @@ templates.json
 carnets.json
 settings.json
 clients.json
+draft.json
+carnets/
 png/
 images/
 

@@ -345,3 +345,61 @@ def test_cards_from_before_get_their_file_on_start(make_app, tmp_path):
         "control": "C-000001", "tpl": {}, "data": {"name": "Viejo"}, "img": {}, "createdAt": 1, "prints": 1, "voided": False}}}))
     with TestClient(make_app()):
         assert json.loads((tmp_path / "carnets" / "C-000001.json").read_text())["data"]["name"] == "Viejo"
+
+
+# --- editar un carnet ya emitido ---
+
+def _issued(client, name="Ana", **extra):
+    return client.post("/cards", json=card_body(name, **extra), headers=KEY).json()
+
+
+def test_edit_keeps_control_code_and_history(client, tmp_path):
+    issued = _issued(client, "Ana Perez")
+    control, code = issued["control"], issued["data"]["code"]
+    fixed = card_body("Ana Pérez")                                   # corrige el nombre; el código viene vacío
+    res = client.patch(f"/cards/{control}", json=fixed, headers=KEY)
+    assert res.status_code == 200
+    card = client.get(f"/cards/{control}", headers=KEY).json()
+    assert card["data"]["name"] == "Ana Pérez" and card["data"]["code"] == code     # el código no cambia
+    assert card["control"] == control and card["createdAt"] == issued["createdAt"] and card["prints"] == 1
+    assert card["updatedBy"] == "admin" and card["updatedAt"] >= card["createdAt"]
+    assert [r["data"]["name"] for r in card["revisions"]] == ["Ana Perez"]          # lo anterior queda a la vista
+    assert len(client.get("/cards", headers=KEY).json()) == 1                       # no creó otro carnet
+    assert json.loads((tmp_path / "carnets" / f"{control}.json").read_text(encoding="utf-8"))["data"]["name"] == "Ana Pérez"
+
+
+def test_edit_can_replace_images_and_explicit_code(client):
+    uri = data_uri()
+    control = _issued(client)["control"]
+    body = card_body("Ana", img={"photo": uri}) | {"data": {"name": "Ana", "code": "NUEVO-9"}}
+    client.patch(f"/cards/{control}", json=body, headers=KEY)
+    card = client.get(f"/cards/{control}", headers=KEY).json()
+    assert card["img"]["photo"] == uri and card["data"]["code"] == "NUEVO-9"
+
+
+def test_revisions_are_bounded(client):
+    control = _issued(client, "v0")["control"]
+    for i in range(1, 26):
+        client.patch(f"/cards/{control}", json=card_body(f"v{i}"), headers=KEY)
+    revisions = client.get(f"/cards/{control}", headers=KEY).json()["revisions"]
+    assert len(revisions) == 20 and revisions[-1]["data"]["name"] == "v24"
+
+
+def test_voided_card_cannot_be_edited_and_unknown_is_404(client):
+    control = _issued(client)["control"]
+    client.post(f"/cards/{control}/void", headers=KEY)
+    assert client.patch(f"/cards/{control}", json=card_body("X"), headers=KEY).status_code == 409
+    assert client.patch("/cards/C-999999", json=card_body("X"), headers=KEY).status_code == 404
+
+
+@pytest.mark.parametrize("body", [{"data": {"name": "x" * 201}, "tpl": {}}, {"tpl": {}, "data": {}, "control": "C-1"}, {"tpl": {}}])
+def test_edit_is_validated(client, body):
+    control = _issued(client)["control"]
+    assert client.patch(f"/cards/{control}", json=body, headers=KEY).status_code == 422
+
+
+def test_an_edited_card_still_round_trips_through_backup_restore(client):
+    control = _issued(client, "Ana")["control"]
+    client.patch(f"/cards/{control}", json=card_body("Ana B"), headers=KEY)
+    backup = client.get("/cards?full=true", headers=KEY).json()[0]
+    assert client.put("/cards/C-000900", json=backup, headers=KEY).status_code == 200

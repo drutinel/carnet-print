@@ -31,6 +31,8 @@ Todo corre en la misma PC, junto a `CarnetPrint.exe`. El navegador dibuja el car
 
 ## Decisiones
 
+- **Corregir un carnet no crea otro:** `PATCH /cards/{control}` conserva control y código y guarda la versión anterior en `revisions` (hasta 20).
+
 - **Sin PDF ni diálogo de impresión:** los PNG van directo al SDK. El tamaño de página y la escala ya no dependen del navegador.
 - **El servidor asigna el control** (`C-000001`…) dentro del lock del archivo: dos kioskos a la vez no se pisan.
 - **Imágenes aparte:** un logo que usan mil carnets se guarda una vez; `carnets.json` y `templates.json` quedan livianos

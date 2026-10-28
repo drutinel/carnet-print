@@ -77,6 +77,12 @@ CarnetPrint.exe printers --json        # impresoras y su estado
   (archivo que no existe, opción no permitida…).
 - Armar el carnet a partir de datos (nombre, cédula…) sigue siendo cosa de la web: la tarjeta se dibuja en el navegador.
 
+### Corregir un carnet ya emitido
+
+Un clic en un carnet del **registro** lo carga en pantalla para modificarlo; **«Guardar cambios e imprimir»** lo corrige en ese
+mismo carnet (control y código no cambian, la versión anterior queda en su historial) y lo reimprime. «Emitir como carnet nuevo»
+lo guarda como otro. Detalle en [docs/OPERACION.md](docs/OPERACION.md#2-editar-un-carnet-ya-emitido).
+
 ### Layout de la tarjeta (rótulos, ajuste de texto y márgenes)
 
 En **Diseño de la plantilla > Campos y márgenes de la tarjeta** se cambia, por plantilla: el rótulo de cada campo
@@ -115,13 +121,14 @@ exportar. Eliminar el perfil revoca su token. Quien llegue a la URL del kiosko p
 | `GET\|PUT\|DELETE /draft` | ambos | El borrador del titular |
 | `GET /cards`, `GET /cards/{control}` | admin, o kiosko con registro | Registro liviano / carnet completo con imágenes |
 | `GET /cards?full=true`, `PUT /cards/{control}`, `POST /cards/{control}/void` | admin | Respaldo, restaurar, anular |
+| `PATCH /cards/{control}` | admin, o kiosko con registro | Corrige un carnet emitido (mismo control y código; `409` si está anulado) |
 | `POST /cards/{control}/reprint` | admin, o kiosko con registro | Cuenta una reimpresión |
 | `GET\|PUT /settings` | lee: ambos · escribe: admin | Ajustes de Avanzado |
 | `GET\|PUT\|DELETE /clients/{id}` | admin | Perfiles de kiosko |
 | `GET /preflight`, `GET /health` | público | Qué le falta a la PC (con enlaces); estado y versión |
 
 Todo JSON de entrada se valida con límites de tamaño; las imágenes deben ser `data:image/(png|jpeg|webp|gif)` de hasta ~2 MB.
-Detalle de diseño: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md).
+Detalle de diseño: [docs/ARQUITECTURA.md](docs/ARQUITECTURA.md). Operación (línea de comandos, edición, qué hacer si algo sensible se sube): [docs/OPERACION.md](docs/OPERACION.md).
 
 ## Desarrollo
 

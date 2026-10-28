@@ -11,7 +11,7 @@ from .jobs import JobService
 from .printers.registry import build_registry
 from .routes import cards, clients, draft, jobs, pages, printers, settings as settings_routes, system, templates
 from .status import StatusCache
-from .store import NotFound, Store, StoreError
+from .store import Conflict, NotFound, Store, StoreError
 
 
 def build_ctx(settings: Settings) -> Ctx:
@@ -46,13 +46,17 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_methods=["GET", "POST", "PUT", "DELETE"],
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE"],
         allow_headers=["X-API-Key"],
     )
 
     @app.exception_handler(NotFound)
     async def not_found(_: Request, exc: NotFound) -> JSONResponse:
         return JSONResponse({"detail": str(exc)}, status_code=404)
+
+    @app.exception_handler(Conflict)
+    async def conflict(_: Request, exc: Conflict) -> JSONResponse:
+        return JSONResponse({"detail": str(exc)}, status_code=409)
 
     @app.exception_handler(StoreError)
     async def store_error(_: Request, exc: StoreError) -> JSONResponse:

@@ -147,3 +147,14 @@ def test_each_kiosk_has_its_own_draft_and_last_card(admin):
     assert admin.get("/cards/last", headers=one).json()["data"]["name"] == "De uno"   # sin registro, pero el suyo
     assert admin.get("/cards/last", headers=two).json()["data"]["name"] == "De otro"
     assert admin.get("/cards/last", headers=KEY).json()["data"]["name"] == "De otro"  # el admin ve el último de todos
+
+
+def test_kiosk_with_registry_can_edit_only_its_own_template_and_without_registry_cannot(admin):
+    _put(admin, show_registry=True)
+    _put(admin, "cerrado", name="Sin registro", template_id="otra", show_registry=False)
+    open_kiosk, closed_kiosk = _kiosk_token(admin), _kiosk_token(admin, "cerrado")
+    control = admin.post("/cards", json=card_body("Ana"), headers=open_kiosk).json()["control"]
+    res = admin.patch(f"/cards/{control}", json=card_body("Ana B") | {"templateId": "otra"}, headers=open_kiosk)
+    assert res.status_code == 200 and res.json()["templateId"] == "acme"       # no puede cambiar de plantilla
+    assert admin.patch(f"/cards/{control}", json=card_body("Hack"), headers=closed_kiosk).status_code == 403
+    assert admin.get(f"/cards/{control}", headers=KEY).json()["updatedBy"] == "acme-sa"

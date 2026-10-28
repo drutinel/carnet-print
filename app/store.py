@@ -12,6 +12,7 @@ from pathlib import Path
 logger = logging.getLogger("cardprint.store")
 MAX_TEMPLATES = 200
 MAX_CLIENTS = 500
+MAX_REVISIONS = 20   # versiones anteriores que se recuerdan de un carnet corregido
 _DATA_URI = re.compile(r"^data:image/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/=]+)$")
 _BLOB_REF = re.compile(r"^blob:([0-9a-f]{40}\.(?:png|jpg|webp|gif))$")
 _EXT = {"png": "png", "jpeg": "jpg", "webp": "webp", "gif": "gif"}
@@ -25,6 +26,10 @@ class StoreError(ValueError):
 
 class NotFound(StoreError):
     """La plantilla o el carnet pedido no existe."""
+
+
+class Conflict(StoreError):
+    """La operación no aplica al estado actual (p. ej. editar un carnet anulado)."""
 
 
 class JsonFile:
@@ -251,6 +256,36 @@ class Store:
             if card is None:
                 raise NotFound("Carnet no existe")
             change(card)
+            changed.update(card)
+
+        self._cards.update(mutate)
+        self._export_card(control)
+        return self._light(changed)
+
+    def update_card(self, control: str, body: dict, by: str = "admin") -> dict:
+        """Corrige un carnet: cambia sus datos, plantilla e imágenes pero conserva control, código (si
+        el nuevo viene vacío), fecha de alta, quién lo emitió y reimpresiones. Guarda lo anterior en
+        `revisions` para poder ver qué se corrigió. Un carnet anulado no se edita."""
+        stored = self._blobs.externalize(body)
+        changed: dict = {}
+
+        def mutate(data: dict) -> None:
+            card = data.get("cards", {}).get(control)
+            if card is None:
+                raise NotFound("Carnet no existe")
+            if card.get("voided"):
+                raise Conflict("Un carnet anulado no se puede editar; emite uno nuevo")
+            new_data = dict(stored.get("data", {}))
+            if not str(new_data.get("code", "")).strip():
+                new_data["code"] = card.get("data", {}).get("code", "")
+            revisions = [*card.get("revisions", []),
+                         {"at": int(time.time() * 1000), "by": by, "data": card.get("data", {})}]
+            card.update({k: v for k, v in stored.items() if k in ("tpl", "img")})
+            card["data"] = new_data
+            card["revisions"] = revisions[-MAX_REVISIONS:]
+            card["updatedAt"], card["updatedBy"] = revisions[-1]["at"], by
+            if "templateId" in stored:
+                card["templateId"] = stored["templateId"]
             changed.update(card)
 
         self._cards.update(mutate)

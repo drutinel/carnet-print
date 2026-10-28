@@ -23,6 +23,7 @@ async function api(path,opt={}){
   return r.status===204?null:r.json();
 }
 const jsonPut=(path,obj)=>api(path,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)});
+const jsonPatch=(path,obj)=>api(path,{method:"PATCH",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)});
 const jsonPost=(path,obj)=>api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)});
 const canSeeRegistry=!KIOSK||!!KIOSK.show_registry;   // un kiosko sin registro no puede leer /cards
 const getAll=()=>api("/cards");                      // registro liviano: sin imágenes
@@ -86,10 +87,12 @@ const LEGACY_DRAFT_KEY="carnet-borrador-titular";   // versiones viejas lo guard
 const DRAFT_FIELDS=["d-name","d-ced","d-code","d-cat","d-extra","d-issue"];
 const DRAFT_KEYS={"d-name":"name","d-ced":"ced","d-code":"code","d-cat":"cat","d-extra":"extra","d-issue":"issue"};
 let draftDirty=false, draftTimer=0, draftErrorShown=false;
+let EDITING=null;   // {control, templateId} mientras se corrige un carnet ya emitido
 function saveDraft(){
-  if(!draftDirty) return;
+  if(!draftDirty || EDITING) return;   // editar un carnet no toca el borrador del carnet que se estaba llenando
   clearTimeout(draftTimer);
   draftTimer=setTimeout(async()=>{
+    if(EDITING) return;   // si mientras tanto se abrió un carnet para corregirlo, no se guarda sobre el borrador
     const body=Object.fromEntries(DRAFT_FIELDS.map(id=>[DRAFT_KEYS[id],$("#"+id).value]));
     body.photo=img.photo||null;
     try{ await jsonPut("/draft",body); draftErrorShown=false; }
@@ -122,15 +125,27 @@ async function restoreDraft(){
   fillTitular(o);
   return true;
 }
+// Guarda ya lo pendiente (antes de cargar otro carnet en pantalla)
+async function flushDraft(){
+  if(!draftDirty || EDITING) return;
+  clearTimeout(draftTimer);
+  const body=Object.fromEntries(DRAFT_FIELDS.map(id=>[DRAFT_KEYS[id],$("#"+id).value]));
+  body.photo=img.photo||null;
+  await jsonPut("/draft",body);
+}
 function clearDraft(){
   clearTimeout(draftTimer); draftDirty=false;
   api("/draft",{method:"DELETE"}).catch(e=>console.warn("No se pudo borrar el borrador:",e));
 }
-function clearTitular(){
+function resetTitularFields(){
   ["d-name","d-ced","d-code","d-cat","d-extra"].forEach(id=>$("#"+id).value="");
   $("#d-issue").value=todayISO();
   setImg("photo",null);
   $("#ced-msg").textContent=""; $("#ced-msg").className="validmsg";
+}
+function clearTitular(){
+  resetTitularFields();
+  EDITING=null; updateEditUI();
   clearDraft(); render();
 }
 DRAFT_FIELDS.forEach(id=>$("#"+id).addEventListener("input",()=>{draftDirty=true;}));
@@ -434,7 +449,7 @@ async function renderRegistry(){
   $("#reg-body").innerHTML=rows.map(c=>{
     const st=statusOf(c);
     const lbl={vig:"Vigente",ven:"Vencido",anu:"Anulado"}[st];
-    return `<tr>
+    return `<tr class="${c.voided?"":"editable-row"}" ${c.voided?"":`data-edit="${esc(c.control)}" tabindex="0" title="Clic para cargarlo y corregirlo"`}>
       <td>${esc(c.control)}</td>
       <td>${esc(new Date(c.createdAt).toLocaleString('es-DO'))}</td>
       <td>${esc(c.data.name)}</td><td>${esc(c.data.ced)}</td><td>${esc(c.data.code)}</td>
@@ -673,8 +688,12 @@ async function printCard(card){
   Object.assign(img, now);
   const ok=await runJob({frontHTML,backHTML,control:card.control!=="—"?card.control:null,templateId:card.templateId||CUR_TPL});
   if(ok){
-    clearDraft();   // impreso: el borrador ya no hace falta
-    if(KIOSK) clearTitular();   // listo para la siguiente persona
+    const wasEditing=!!EDITING;
+    if(wasEditing){ EDITING=null; updateEditUI(); resetTitularFields(); render(); await restoreDraft(); }   // vuelve lo que se estaba llenando
+    else{
+      clearDraft();   // impreso: el borrador ya no hace falta
+      if(KIOSK) clearTitular();   // listo para la siguiente persona
+    }
   }
 }
 
@@ -683,8 +702,9 @@ let busy=false;
 function setBusy(b){ busy=b; ["generate","preview-print"].forEach(id=>$("#"+id).disabled=b); }
 // Una tarjeta física no se deshace: mientras hay un trabajo en curso no se acepta otro clic.
 async function withBusy(fn){ if(busy) return; setBusy(true); try{ await fn(); } finally{ setBusy(false); refreshPrinterChip(); } }
-async function generate(register){ return withBusy(()=>generateNow(register)); }
-async function generateNow(register){
+// mode: "new" emite un carnet nuevo · "edit" corrige el que se está editando (mismo control) · "none" solo imprime
+async function generate(mode){ return withBusy(()=>generateNow(mode)); }
+async function generateNow(mode){
   const d=data(), t=tpl();
   if(!d.name.trim()){setStatus("Falta el nombre del titular.","bad");return;}
   if(digits(d.ced).length===11 && !validCed(d.ced)){
@@ -692,13 +712,22 @@ async function generateNow(register){
   }
   const imgs={logo1:img.logo1,logo2:img.logo2,seal:img.seal,sign:img.sign,photo:img.photo};
   let card;
-  if(register){
+  if(mode==="edit"){
+    const {control,templateId}=EDITING;
+    // Corrige el MISMO carnet (control y código no cambian; lo anterior queda en su historial) y lo reimprime
+    const updated=await jsonPatch("/cards/"+encodeURIComponent(control),{tpl:t,data:d,img:imgs,templateId});
+    $("#d-code").value=updated.data.code; render();
+    await jsonPost(`/cards/${encodeURIComponent(control)}/reprint`,{});
+    card={...updated,img:imgs};
+    setStatus(`Carnet ${control} corregido; imprimiendo con los datos nuevos.`,"ok");
+    if(canSeeRegistry) await renderRegistry();
+  }else if(mode==="new"){
     if(canSeeRegistry){   // aviso si ya hay carnet vigente con esa cédula
       const existing=(await getAll()).find(c=>digits(c.data.ced)===digits(d.ced) && statusOf(c)==="vig");
       if(existing && !confirm(`La cédula ${d.ced} ya tiene un carnet vigente (${existing.control}). ¿Emitir otro?`)) return;
     }
     // El servidor asigna control y código (no se pisan carnets si hay varios kioskos a la vez)
-    const created=await jsonPost("/cards",{tpl:t,data:d,img:imgs,templateId:CUR_TPL});
+    const created=await jsonPost("/cards",{tpl:t,data:d,img:imgs,templateId:EDITING?EDITING.templateId:CUR_TPL});
     $("#d-code").value=created.data.code; render();
     card={...created,img:imgs};
     setStatus(`Carnet ${created.control} registrado.`,"ok");
@@ -709,12 +738,51 @@ async function generateNow(register){
   }
   await printCard(card);
 }
-$("#generate").addEventListener("click",()=>generate(true));
-$("#preview-print").addEventListener("click",()=>generate(false));
+$("#generate").addEventListener("click",()=>generate(EDITING?"edit":"new"));
+$("#preview-print").addEventListener("click",()=>generate("none"));
+
+/* ---------- Editar un carnet ya emitido ---------- */
+function updateEditUI(){
+  const banner=$("#edit-banner");
+  banner.hidden=!EDITING;
+  if(EDITING) $("#edit-text").textContent=`Estás corrigiendo el carnet ${EDITING.control}: los cambios se guardan en ese mismo carnet (control y código no cambian).`;
+  $("#generate").textContent=EDITING?"Guardar cambios e imprimir":(KIOSK?"Generar e imprimir":"Generar, registrar e imprimir");
+}
+async function editCard(control){
+  if(busy) return;
+  try{
+    const card=await getCard(control);
+    if(card.voided){ setStatus(`El carnet ${control} está anulado y no se puede editar: emite uno nuevo.`,"warn"); return; }
+    try{ await flushDraft(); }catch(e){ console.warn("No se pudo guardar el borrador antes de editar:",e); }   // lo que se estaba llenando no se pierde
+    clearTimeout(autosaveTimer); clearTimeout(draftTimer);
+    EDITING={control,templateId:card.templateId||null};   // desde aquí nada de lo que se cargue pisa el borrador
+    if(!KIOSK){ CUR_TPL=null; renderTplSelect(); applyTpl({...card.tpl,img:card.img}); }   // el diseño con el que se emitió
+    resetTitularFields();
+    const d=card.data;
+    $("#d-name").value=d.name||""; $("#d-ced").value=d.ced||""; $("#d-code").value=d.code||"";
+    $("#d-cat").value=d.cat||""; $("#d-extra").value=d.extra||""; $("#d-issue").value=d.issue||todayISO();
+    setImg("photo",card.img&&card.img.photo);
+    $("#d-ced").dispatchEvent(new Event("input"));
+    updateEditUI(); render();
+    $("#pv-front").scrollIntoView({behavior:"smooth",block:"center"});
+    setStatus(`Carnet ${control} cargado: corrige lo que haga falta y pulsa «Guardar cambios e imprimir».`,"ok");
+  }catch(e){ EDITING=null; updateEditUI(); setStatus("No se pudo cargar el carnet: "+e.message,"bad"); }
+}
+$("#edit-cancel").addEventListener("click",async()=>{
+  EDITING=null; updateEditUI(); resetTitularFields();
+  if(!(await restoreDraft())) render();   // vuelve lo que se estaba llenando antes
+  setStatus("Edición cancelada: no se cambió nada.","ok");
+});
+$("#edit-as-new").addEventListener("click",()=>generate("new").then(()=>{ EDITING=null; updateEditUI(); }));
 
 /* reimprimir / anular / buscar */
 $("#reg-body").addEventListener("click",async e=>{
   const rp=e.target.dataset.reprint, vd=e.target.dataset.void;
+  if(!rp && !vd){   // clic en la fila: se carga el carnet para corregirlo
+    const row=e.target.closest("tr[data-edit]");
+    if(row) await editCard(row.dataset.edit);
+    return;
+  }
   try{
     if(rp) await withBusy(async()=>{
       const full=await getCard(rp);   // el registro liviano no trae las imágenes
@@ -980,3 +1048,7 @@ function setupKiosk(){
 })();
 $("#open-adv").addEventListener("click",()=>{ $("#advanced").open=true; });
 })();
+$("#reg-body").addEventListener("keydown",e=>{
+  const row=e.target.closest("tr[data-edit]");
+  if(row && e.key==="Enter" && e.target===row){ e.preventDefault(); editCard(row.dataset.edit); }
+});

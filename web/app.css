@@ -193,3 +193,8 @@
   .lay-table input[type=number]{width:70px}
   .lay-table select{min-width:130px}
   #layout-json-text{font-family:ui-monospace,Menlo,Consolas,monospace;font-size:12px;min-height:260px;white-space:pre}
+  .editable-row{cursor:pointer}
+  .editable-row:hover,.editable-row:focus-visible{background:rgba(59,130,246,.12)}
+  .edit-banner{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-top:14px;
+    padding:10px 12px;border:1px solid rgba(59,130,246,.5);border-radius:10px;background:rgba(59,130,246,.1);font-size:12.5px}
+  .edit-banner .row{margin:0}

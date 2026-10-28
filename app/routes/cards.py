@@ -40,6 +40,21 @@ def create_card(body: CardIn, ctx: Ctx = Depends(get_ctx), principal: Principal 
     return ctx.store.create_card(body.model_dump(exclude={"templateId"}), template_id, principal.client_id or "admin")
 
 
+@router.patch("/cards/{control}")
+def edit_card(
+    control: ItemId, body: CardIn, ctx: Ctx = Depends(get_ctx), principal: Principal = Depends(require_registry)
+) -> dict:
+    """Corrige un carnet ya emitido (mismo control y código). Guarda la versión anterior en `revisions`.
+    Después se reimprime con `POST /cards/{control}/reprint` y `POST /jobs`."""
+    template_id = body.templateId if principal.is_admin else principal.client["template_id"]
+    if template_id and template_id not in ctx.store.template_ids():
+        raise HTTPException(status_code=422, detail="Plantilla no existe")
+    return ctx.store.update_card(
+        control, body.model_dump(exclude={"templateId"}) | ({"templateId": template_id} if template_id else {}),
+        principal.client_id or "admin",
+    )
+
+
 @router.put("/cards/{control}")
 def restore_card(
     control: ItemId, body: CardRestore, ctx: Ctx = Depends(get_ctx), _: Principal = Depends(require_admin)
