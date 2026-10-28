@@ -1,0 +1,32 @@
+"""Punto de entrada del .exe: crea la config la primera vez, levanta el API y abre la UI."""
+import sys
+import threading
+import webbrowser
+
+import uvicorn
+
+from .bootstrap import ensure_config
+from .config import Settings
+from .main import create_app
+from .paths import app_dir
+
+
+def main() -> int:
+    new_key = ensure_config(app_dir())
+    settings = Settings()
+    if new_key:
+        print(f"Primera ejecución. API key (también en {app_dir() / '.env'}): {new_key}")
+    url = f"http://localhost:{settings.port}/ui/generador-carnets.html"
+    print(f"CarnetPrint en {url}\nDatos en {settings.data_dir} (templates.json, carnets.json)")
+    if settings.open_browser:
+        threading.Timer(1.5, webbrowser.open, args=(url,)).start()
+    try:
+        uvicorn.run(create_app(settings), host=settings.host, port=settings.port, log_level="info")
+    except OSError as exc:
+        print(f"No se pudo abrir el puerto {settings.port}: {exc}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

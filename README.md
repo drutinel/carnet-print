@@ -44,9 +44,30 @@ La URL y la API key se guardan en `localStorage` (panel “Conexión al middlewa
 - **Overlay con bitmap / paneles de seguridad:** se configuran en la app de Zebra, no por opciones CUPS;
   por CUPS solo se elige `RibbonName`/`RibbonCombination` (p. ej. `15Hologram`). Probar con la cinta puesta.
 
+## CarnetPrint.exe (Windows, Entrust Sigma DS3)
+
+`build-exe.ps1` genera `dist\CarnetPrint.exe` + `dist\bridge\` (CardBridge.exe y sus DLL). Copiar ambos
+juntos al equipo con el driver XPS de Entrust y el .NET 8 Runtime; doble clic y se abre el generador.
+
+Junto al .exe, en la primera ejecución, se crean solos:
+
+| Archivo | Contenido |
+|---|---|
+| `.env` | API key aleatoria (también se imprime en consola) |
+| `printers.yaml` | Impresora Entrust (editar `printer_name` si hace falta) |
+| `templates.json` | Plantillas y cuál es la activa para el API |
+| `carnets.json` | Carnets generados (registro, reimpresiones, anulados) |
+
+API (todos con `X-API-Key`): imprime **directo**, sin PDF.
+- `POST /jobs`: `front` + `back` (PNG), `front_k`/`back_k` opcionales, `template_id` opcional
+  (si no viene se usa la plantilla activa).
+- `GET /templates`, `PUT|GET|DELETE /templates/{id}`, `POST /templates/{id}/activate`.
+- `GET /cards`, `PUT /cards/{control}`.
+
+Los datos de un navegador que usaba IndexedDB se suben solos al .exe la primera vez que se abre la UI.
+
 ## Pendientes / siguiente paso
 
-- Confirmar finalización real del trabajo (hoy `submitted` = CUPS lo aceptó): polling con `lpstat`.
 - Probar cinta Hologram y cinta de seguridad con tarjeta real.
 - Obtener y probar el driver del DS3.
 - Si la webapp está en otro dominio: HTTPS delante (nginx/caddy) y `CARDPRINT_CORS_ORIGINS`.

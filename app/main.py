@@ -1,9 +1,10 @@
 import hmac
 import json
+from typing import Annotated
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, Header, HTTPException, Path as PathParam, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -11,12 +12,15 @@ from pydantic import BaseModel
 
 from .config import Settings, load_printers
 from .jobs import Job, JobService
+from .paths import resource_dir
 from .printers.registry import build_registry
 from .render import ImageError, faces_to_pdf, normalize_faces
+from .store import NotFound, Store, StoreError
 
-WEB_DIR = Path(__file__).resolve().parent.parent / "web"
-PDF_MAGIC = b"%PDF-"
+WEB_DIR = resource_dir() / "web"
 MAX_COPIES = 10
+# id de plantilla / número de control: se usan como clave en el JSON y en la URL
+ItemId = Annotated[str, PathParam(pattern=r"^[\w\-. ]{1,64}$")]
 
 
 class PrinterOut(BaseModel):
@@ -32,6 +36,7 @@ class JobOut(BaseModel):
     state: str
     backend_job_id: str | None = None
     error: str | None = None
+    template_id: str | None = None
 
 
 def _job_out(job: Job) -> JobOut:
@@ -42,6 +47,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     registry = build_registry(load_printers(settings.printers_file))
     jobs = JobService({pid: adapter for pid, (_, adapter) in registry.items()})
+    store = Store(settings.data_dir)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -52,7 +58,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
-        allow_methods=["GET", "POST"],
+        allow_methods=["GET", "POST", "PUT", "DELETE"],
         allow_headers=["X-API-Key"],
     )
 
@@ -81,52 +87,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.post("/jobs", response_model=JobOut, status_code=202, dependencies=[Depends(require_key)])
     async def create_job(
         printer_id: str = Form(...),
-        pdf: UploadFile | None = File(None),
-        front: UploadFile | None = File(None),
-        back: UploadFile | None = File(None),
+        front: UploadFile = File(...),
+        back: UploadFile = File(...),
         front_k: UploadFile | None = File(None),
         back_k: UploadFile | None = File(None),
         copies: int = Form(1, ge=1, le=MAX_COPIES),
         options: str = Form("{}"),
+        template_id: str | None = Form(None),
     ) -> JobOut:
-        """Un `pdf` ya renderizado (pág. 1 = frente, pág. 2 = reverso) o `front` + `back` en PNG.
+        """Imprime directo: `front` y `back` en PNG (sin PDF), más `front_k` / `back_k`
+        opcionales (capa negra, panel K, mismo tamaño que su cara).
 
-        Con PNG, `front_k` / `back_k` opcionales: capa negra (panel K) del mismo tamaño que su
-        cara. A un adaptador con SDK los PNG le llegan tal cual (sin PDF ni remuestreo); al resto,
-        en un PDF sin pérdida.
+        `template_id` es la plantilla con la que se armó el carnet; si no viene, se usa la
+        plantilla activa del API (ver `/templates`).
         """
         if printer_id not in registry:
             raise HTTPException(status_code=404, detail="Impresora no existe")
         cfg, adapter = registry[printer_id]
 
+        if template_id is None:
+            template_id = store.active_template_id()
+        elif template_id not in store.list_templates()["templates"]:
+            raise HTTPException(status_code=422, detail="Plantilla no existe")
+
         async def read_limited(upload: UploadFile) -> bytes:
-            data = await upload.read(settings.max_pdf_bytes + 1)
-            if len(data) > settings.max_pdf_bytes:
+            data = await upload.read(settings.max_upload_bytes + 1)
+            if len(data) > settings.max_upload_bytes:
                 raise HTTPException(status_code=413, detail="Archivo demasiado grande")
             return data
 
+        raw = {"front": await read_limited(front), "back": await read_limited(back)}
+        for key, upload in (("front_k", front_k), ("back_k", back_k)):
+            if upload is not None:
+                raw[key] = await read_limited(upload)
         data: bytes | None = None
-        faces: dict[str, bytes] | None = None
-        if pdf is not None:
-            data = await read_limited(pdf)
-            if not data.startswith(PDF_MAGIC):
-                raise HTTPException(status_code=422, detail="El archivo no es un PDF")
-        elif front is not None and back is not None:
-            raw = {"front": await read_limited(front), "back": await read_limited(back)}
-            for key, upload in (("front_k", front_k), ("back_k", back_k)):
-                if upload is not None:
-                    raw[key] = await read_limited(upload)
-            try:
-                faces = await run_in_threadpool(normalize_faces, raw)
-                if not adapter.accepts_faces:  # capas K solo las usa un SDK
-                    data = await run_in_threadpool(
-                        faces_to_pdf, faces["front"], faces["back"]
-                    )
-                    faces = None
-            except ImageError as exc:
-                raise HTTPException(status_code=422, detail=str(exc)) from exc
-        else:
-            raise HTTPException(status_code=422, detail="Envía `pdf` o `front` y `back`")
+        try:
+            faces: dict[str, bytes] | None = await run_in_threadpool(normalize_faces, raw)
+            if not adapter.accepts_faces:  # CUPS/Windows imprimen un PDF armado aquí
+                data = await run_in_threadpool(faces_to_pdf, faces["front"], faces["back"])
+                faces = None
+        except ImageError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
 
         try:
             parsed = json.loads(options)
@@ -146,9 +147,49 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             )
 
         job = jobs.enqueue(
-            printer_id, data, copies, {k: str(v) for k, v in parsed.items()}, faces=faces
+            printer_id, data, copies, {k: str(v) for k, v in parsed.items()},
+            faces=faces, template_id=template_id,
         )
         return _job_out(job)
+
+    # --- plantillas y carnets generados: JSON junto al .exe (templates.json, carnets.json) ---
+    def store_call(fn, *args):
+        try:
+            return fn(*args)
+        except NotFound as exc:
+            raise HTTPException(status_code=404, detail=str(exc)) from exc
+        except StoreError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+    @app.get("/templates", dependencies=[Depends(require_key)])
+    def list_templates() -> dict:
+        """`{active, templates}`; `active` es la plantilla que usa el API por defecto."""
+        return store_call(store.list_templates)
+
+    @app.get("/templates/{template_id}", dependencies=[Depends(require_key)])
+    def get_template(template_id: ItemId) -> dict:
+        return store_call(store.get_template, template_id)
+
+    @app.put("/templates/{template_id}", dependencies=[Depends(require_key)])
+    def put_template(template_id: ItemId, body: dict = Body(...)) -> dict:
+        return store_call(store.put_template, template_id, body)
+
+    @app.delete("/templates/{template_id}", status_code=204, dependencies=[Depends(require_key)])
+    def delete_template(template_id: ItemId) -> None:
+        store_call(store.delete_template, template_id)
+
+    @app.post("/templates/{template_id}/activate", dependencies=[Depends(require_key)])
+    def activate_template(template_id: ItemId) -> dict:
+        store_call(store.activate_template, template_id)
+        return store.list_templates()
+
+    @app.get("/cards", dependencies=[Depends(require_key)])
+    def list_cards() -> list[dict]:
+        return store_call(store.list_cards)
+
+    @app.put("/cards/{control}", dependencies=[Depends(require_key)])
+    def put_card(control: ItemId, body: dict = Body(...)) -> dict:
+        return store_call(store.put_card, control, body)
 
     @app.get("/jobs/{job_id}", response_model=JobOut, dependencies=[Depends(require_key)])
     def get_job(job_id: str) -> JobOut:

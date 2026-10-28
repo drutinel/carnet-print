@@ -19,6 +19,7 @@ class Job:
     state: str  # queued | submitted | printed | failed
     backend_job_id: str | None = None
     error: str | None = None
+    template_id: str | None = None
 
 
 class JobService:
@@ -37,9 +38,14 @@ class JobService:
         copies: int,
         options: dict[str, str],
         faces: dict[str, bytes] | None = None,
+        template_id: str | None = None,
     ) -> Job:
-        """`pdf` o `faces` (PNG por cara: front, back, front_k, back_k), no ambos."""
-        job = Job(id=uuid.uuid4().hex, printer_id=printer_id, copies=copies, state="queued")
+        """`faces` (PNG por cara: front, back, front_k, back_k); `pdf` solo para adaptadores
+        sin SDK (CUPS/Windows), que lo arma el API a partir de las caras."""
+        job = Job(
+            id=uuid.uuid4().hex, printer_id=printer_id, copies=copies, state="queued",
+            template_id=template_id,
+        )
         pdf_path = None
         face_paths = None
         if faces:

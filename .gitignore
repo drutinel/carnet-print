@@ -1,1 +1,8 @@
 Instalar-SQLServer-Developer.ps1
+
+# Datos junto al .exe y artefactos de empaquetado
+templates.json
+carnets.json
+build/
+dist/
+.venv-build/

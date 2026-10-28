@@ -1,37 +1,16 @@
 import json
 import subprocess
-import tempfile
 from pathlib import Path
 
 from .base import PrintError, PrintRequest, PrinterAdapter
 from .errors import operator_message
 
 BRIDGE_DIR = Path(__file__).resolve().parents[2] / "bridge"
-RENDER_DPI = 300
 # Espera al operador ante un error leve (sin tarjetas, tapa abierta, cinta) antes de
 # cancelar la tarjeta; el tiempo total del trabajo la incluye.
 RECOVER_WAIT_S = 120
 PRINT_TIMEOUT_S = 300 + RECOVER_WAIT_S
 STATUS_TIMEOUT_S = 30
-
-
-def render_pages(pdf_path: Path, out_dir: Path) -> list[Path]:
-    """PDF -> un PNG por página a 300 ppp (pág. 1 = frente, pág. 2 = reverso)."""
-    import pypdfium2 as pdfium
-
-    pdf = pdfium.PdfDocument(str(pdf_path))
-    try:
-        if len(pdf) not in (1, 2):
-            raise PrintError(f"El PDF debe tener 1 o 2 páginas (tiene {len(pdf)})")
-        paths = []
-        for i, page in enumerate(pdf):
-            image = page.render(scale=RENDER_DPI / 72).to_pil().convert("RGB")
-            path = out_dir / f"page{i + 1}.png"
-            image.save(path, dpi=(RENDER_DPI, RENDER_DPI))
-            paths.append(path)
-        return paths
-    finally:
-        pdf.close()
 
 
 class BridgeAdapter(PrinterAdapter):
@@ -87,24 +66,18 @@ class BridgeAdapter(PrinterAdapter):
 
     def submit(self, request: PrintRequest) -> str:
         args = self._option_args(request.options)
-        with tempfile.TemporaryDirectory() as tmp:
-            if request.faces:
-                # PNG nativos tal cual: sin PDF ni remuestreo; capas K solo si vienen
-                for key in ("front", "back", "front_k", "back_k"):
-                    if key in request.faces:
-                        args += [f"--{key.replace('_', '-')}", str(request.faces[key])]
-            else:
-                pages = render_pages(request.pdf_path, Path(tmp))
-                args += ["--front", str(pages[0])]
-                if len(pages) == 2:
-                    args += ["--back", str(pages[1])]
+        if not request.faces:
+            raise PrintError("El puente imprime directo: faltan las imágenes front/back")
+        for key in ("front", "back", "front_k", "back_k"):
+            if key in request.faces:
+                args += [f"--{key.replace('_', '-')}", str(request.faces[key])]
 
-            job_ids = []
-            for _ in range(request.copies):
-                result = self._call(["print", *args], PRINT_TIMEOUT_S)
-                if not result.get("ok"):
-                    raise PrintError(operator_message(self.vendor, self.error_messages, result))
-                job_ids.append(str(result.get("printerJobId", "?")))
+        job_ids = []
+        for _ in range(request.copies):
+            result = self._call(["print", *args], PRINT_TIMEOUT_S)
+            if not result.get("ok"):
+                raise PrintError(operator_message(self.vendor, self.error_messages, result))
+            job_ids.append(str(result.get("printerJobId", "?")))
         return f"{self.job_prefix}:" + ",".join(job_ids)
 
     job_prefix = "sdk"

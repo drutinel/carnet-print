@@ -9,8 +9,6 @@ from app.printers import entrust_sdk
 from app.printers.base import PrintError, PrintRequest
 from app.printers.entrust_sdk import EntrustSdkAdapter
 
-pytest.importorskip("pypdfium2")
-
 
 @pytest.fixture
 def bridge(tmp_path):
@@ -21,10 +19,12 @@ def bridge(tmp_path):
 
 @pytest.fixture
 def pdf(tmp_path):
-    faces = [Image.new("RGB", (1011, 638), c) for c in ("red", "blue")]
-    path = tmp_path / "card.pdf"
-    faces[0].save(path, format="PDF", resolution=300, save_all=True, append_images=faces[1:])
-    return path
+    """Caras PNG tal como las recibe el puente (nombre `pdf` por los tests existentes)."""
+    faces = {}
+    for key, color in (("front", "red"), ("back", "blue")):
+        faces[key] = tmp_path / f"{key}.png"
+        Image.new("RGB", (1011, 638), color).save(faces[key])
+    return faces
 
 
 def _fake_run(calls, reply):
@@ -41,7 +41,7 @@ def test_submit_renders_faces_and_maps_options(monkeypatch, bridge, pdf):
     calls = []
     monkeypatch.setattr(entrust_sdk.subprocess, "run", _fake_run(calls, {"ok": True, "printerJobId": 7}))
     opts = {"rotate_back": "true", "rotate_front": "false", "topcoat_front": "all"}
-    job = EntrustSdkAdapter("XPS Card Printer", bridge).submit(PrintRequest(pdf, 2, opts))
+    job = EntrustSdkAdapter("XPS Card Printer", bridge).submit(PrintRequest(None, 2, opts, faces=pdf))
     assert job == "entrust:7,7"
     cmd = calls[0]
     assert cmd[:2] == [bridge, "print"]
@@ -54,17 +54,17 @@ def test_submit_renders_faces_and_maps_options(monkeypatch, bridge, pdf):
 def test_submit_raises_printer_error(monkeypatch, bridge, pdf):
     monkeypatch.setattr(entrust_sdk.subprocess, "run", _fake_run([], {"ok": False, "error": "sin tarjetas"}))
     with pytest.raises(PrintError, match="sin tarjetas"):
-        EntrustSdkAdapter("P", bridge).submit(PrintRequest(pdf, 1, {}))
+        EntrustSdkAdapter("P", bridge).submit(PrintRequest(None, 1, {}, faces=pdf))
 
 
 def test_submit_rejects_unknown_option(bridge, pdf):
     with pytest.raises(PrintError, match="no soportada"):
-        EntrustSdkAdapter("P", bridge).submit(PrintRequest(pdf, 1, {"RibbonName": "x"}))
+        EntrustSdkAdapter("P", bridge).submit(PrintRequest(None, 1, {"RibbonName": "x"}, faces=pdf))
 
 
 def test_missing_bridge(tmp_path, pdf):
     with pytest.raises(PrintError, match="CardBridge"):
-        EntrustSdkAdapter("P", str(tmp_path / "nope.exe")).submit(PrintRequest(pdf, 1, {}))
+        EntrustSdkAdapter("P", str(tmp_path / "nope.exe")).submit(PrintRequest(None, 1, {}, faces=pdf))
 
 
 @pytest.mark.parametrize(

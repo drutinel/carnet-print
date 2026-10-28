@@ -54,7 +54,7 @@ def captured(monkeypatch):
 def client(tmp_path):
     printers = tmp_path / "printers.yaml"
     printers.write_text("printers:\n  - {id: mock, label: Mock, adapter: mock}\n")
-    settings = Settings(api_key="secret", printers_file=printers, max_pdf_bytes=2_000_000)
+    settings = Settings(api_key="secret", printers_file=printers, max_upload_bytes=2_000_000, data_dir=tmp_path)
     with TestClient(create_app(settings)) as c:
         yield c
 

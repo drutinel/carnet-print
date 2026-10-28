@@ -1,9 +1,22 @@
+from pathlib import Path
 import subprocess  # noqa: F401 - los tests lo parchean por este módulo
 
+from ..paths import app_dir
 from .bridge import BRIDGE_DIR, BridgeAdapter
 from .errors import ENTRUST_MESSAGES
 
-DEFAULT_BRIDGE = BRIDGE_DIR / "bin" / "CardBridge.exe"
+
+def find_bridge() -> Path:
+    """CardBridge.exe junto al .exe (carpeta `bridge/` o al lado), o el de desarrollo."""
+    candidates = [
+        app_dir() / "bridge" / "CardBridge.exe",
+        app_dir() / "CardBridge.exe",
+        BRIDGE_DIR / "bin" / "CardBridge.exe",
+    ]
+    return next((c for c in candidates if c.exists()), candidates[-1])
+
+
+DEFAULT_BRIDGE = find_bridge()
 
 
 class EntrustSdkAdapter(BridgeAdapter):

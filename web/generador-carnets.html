@@ -118,8 +118,8 @@
   /* Datos que van por el panel K (negro resina): negro puro, ver rasterizeFace */
   .card .kblack,.card .fld .v.kblack{color:#000}
   .card .footer{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:auto;padding-top:2px}
-  .card .dates{display:flex;gap:12px}
-  .card .code{text-align:right;flex:0 0 auto}
+  .card .dates{display:flex;gap:12px;min-width:0;flex:1 1 auto}
+  .card .code{text-align:right;flex:0 0 auto;white-space:nowrap}
   .card .code .k{font-size:8.5px;font-weight:700;color:#4b5563;text-transform:uppercase}
   .card .code .v{font-size:12px;font-weight:700;color:var(--card-accent);letter-spacing:.04em}
   /* Reverso */
@@ -276,8 +276,11 @@
       </div>
 
       <div class="row">
-        <button class="btn sm" id="save-tpl" type="button">Guardar plantilla</button>
-        <button class="btn sm" id="load-tpl" type="button">Cargar plantilla guardada</button>
+        <select id="tpl-select" title="Plantilla en uso"></select>
+        <button class="btn sm" id="save-tpl" type="button">Guardar</button>
+        <button class="btn sm" id="new-tpl" type="button">Nueva…</button>
+        <button class="btn sm" id="activate-tpl" type="button" title="La plantilla activa es la que usa el API cuando un trabajo no indica otra">Usar en el API</button>
+        <button class="btn sm danger" id="del-tpl" type="button">Eliminar</button>
       </div>
     </div>
   </section>
@@ -404,26 +407,42 @@ const $ = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
-/* ---------- IndexedDB ---------- */
-const DB_NAME="carnets_db", STORE="cards", TSTORE="tpl";
-let db;
-function openDB(){
-  return new Promise((res,rej)=>{
-    const r=indexedDB.open(DB_NAME,1);
-    r.onupgradeneeded=e=>{
-      const d=e.target.result;
-      if(!d.objectStoreNames.contains(STORE)) d.createObjectStore(STORE,{keyPath:"control"});
-      if(!d.objectStoreNames.contains(TSTORE)) d.createObjectStore(TSTORE,{keyPath:"id"});
-    };
-    r.onsuccess=e=>{db=e.target.result;res(db)};
-    r.onerror=e=>rej(e);
-  });
+/* ---------- Almacén: API del middleware (templates.json y carnets.json junto al .exe) ---------- */
+async function api(path,opt={}){
+  const r=await fetch(apiBase()+path,{...opt,headers:{...apiHeaders(),...(opt.headers||{})}});
+  if(r.status===401) throw new Error("API key inválida (abre “Conexión al middleware”)");
+  if(!r.ok){const e=await r.json().catch(()=>({})); throw new Error(typeof e.detail==="string"?e.detail:("error "+r.status));}
+  return r.status===204?null:r.json();
 }
-function tx(store,mode){return db.transaction(store,mode).objectStore(store);}
-function getAll(){return new Promise(r=>{const q=tx(STORE,"readonly").getAll();q.onsuccess=()=>r(q.result||[])});}
-function putCard(c){return new Promise(r=>{const q=tx(STORE,"readwrite").put(c);q.onsuccess=()=>r()});}
-function saveTplDB(obj){return new Promise(r=>{const q=tx(TSTORE,"readwrite").put({id:"default",data:obj});q.onsuccess=()=>r()});}
-function loadTplDB(){return new Promise(r=>{const q=tx(TSTORE,"readonly").get("default");q.onsuccess=()=>r(q.result?q.result.data:null)});}
+const jsonPut=(path,obj)=>api(path,{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify(obj)});
+function getAll(){return api("/cards");}
+function putCard(c){return jsonPut("/cards/"+encodeURIComponent(c.control),c);}
+
+/* Datos que antes vivían en IndexedDB de este navegador: se suben una sola vez al .exe. */
+async function migrateLegacy(){
+  if(localStorage.getItem("carnet-migrado-v1")) return;
+  const legacy=await new Promise(res=>{
+    const r=indexedDB.open("carnets_db",1);
+    r.onupgradeneeded=e=>{e.target.transaction.abort();};   // no existía: nada que migrar
+    r.onerror=()=>res(null);
+    r.onsuccess=e=>{
+      const d=e.target.result, out={cards:[],tpl:null};
+      try{
+        const t=d.transaction(["cards","tpl"],"readonly");
+        t.objectStore("cards").getAll().onsuccess=ev=>{out.cards=ev.target.result||[];};
+        t.objectStore("tpl").get("default").onsuccess=ev=>{out.tpl=ev.target.result?ev.target.result.data:null;};
+        t.oncomplete=()=>{d.close();res(out);};
+        t.onerror=()=>{d.close();res(null);};
+      }catch{d.close();res(null);}
+    };
+  });
+  if(legacy){
+    if(legacy.tpl && !Object.keys(TPLS).length) await jsonPut("/templates/principal",{name:"Principal",...legacy.tpl});
+    const have=new Set((await getAll()).map(c=>c.control));
+    for(const c of legacy.cards) if(!have.has(c.control)) await putCard(c);
+  }
+  localStorage.setItem("carnet-migrado-v1","1");
+}
 
 /* ---------- Estado de imágenes (dataURL) ---------- */
 const img={logo1:null,logo2:null,seal:null,sign:null,photo:null};
@@ -686,25 +705,75 @@ $$("#t-org,#t-title,#t-signname,#t-contact,#t-legend,#t-prefix,#d-name,#d-code,#
   .forEach(el=>el.addEventListener("input",render));
 $$("#t-band,#t-accent,#t-cardbg,#t-valunit,#d-issue,#t-sealsrc,#t-orgbold,#t-titlebold").forEach(el=>el.addEventListener("change",render));
 
-/* ---------- Plantilla persistente ---------- */
+/* ---------- Plantillas (templates.json junto al .exe) ---------- */
+let TPLS={}, ACTIVE_TPL=null, CUR_TPL=null;
+const slug=n=>n.trim().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g,"").replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"").slice(0,48);
 function tplSnapshot(){return {...tpl(), img:{logo1:img.logo1,logo2:img.logo2,seal:img.seal,sign:img.sign}};}
-async function doSaveTpl(){
-  if(!db) return setStatus("No se puede guardar aquí: abre http://localhost:8787/ui/generador-carnets.html","bad");
-  await saveTplDB(tplSnapshot());
-  setStatus("Plantilla guardada.","ok");
+function renderTplSelect(){
+  const sel=$("#tpl-select");
+  sel.innerHTML=Object.entries(TPLS).map(([id,t])=>
+    `<option value="${esc(id)}">${esc(t.name||id)}${id===ACTIVE_TPL?" ★ API":""}</option>`).join("")
+    ||'<option value="">(sin plantillas)</option>';
+  // CUR_TPL nulo = diseño tomado de un carnet viejo: no se autoguarda sobre ninguna plantilla
+  if(!CUR_TPL && Object.keys(TPLS).length) sel.insertAdjacentHTML("afterbegin",'<option value="">(diseño del carnet cargado)</option>');
+  sel.value=CUR_TPL||"";
 }
-// El diseño (textos, colores, logos, sello, firma) se guarda solo al cambiar y se
-// carga al abrir; antes vivía solo en memoria y se perdía al recargar la página.
+async function refreshTemplates(){
+  const r=await api("/templates");
+  TPLS=r.templates; ACTIVE_TPL=r.active;
+  if(!CUR_TPL || !TPLS[CUR_TPL]) CUR_TPL=ACTIVE_TPL||Object.keys(TPLS)[0]||null;
+  renderTplSelect();
+}
+async function putTpl(id,name){
+  const body={name,...tplSnapshot()};
+  await jsonPut("/templates/"+encodeURIComponent(id),body);
+  TPLS[id]=body; if(!ACTIVE_TPL) ACTIVE_TPL=id;
+}
+async function doSaveTpl(){
+  try{
+    if(!CUR_TPL) return doNewTpl();
+    await putTpl(CUR_TPL,TPLS[CUR_TPL]?.name||CUR_TPL); renderTplSelect();
+    setStatus("Plantilla guardada.","ok");
+  }catch(e){setStatus("No se pudo guardar la plantilla: "+e.message,"bad");}
+}
+async function doNewTpl(){
+  const name=(prompt("Nombre de la plantilla nueva:")||"").trim(); if(!name) return;
+  const id=slug(name); if(!id) return setStatus("Nombre no válido.","bad");
+  if(TPLS[id] && !confirm(`Ya existe “${TPLS[id].name||id}”. ¿Reemplazarla con el diseño actual?`)) return;
+  try{ await putTpl(id,name); CUR_TPL=id; renderTplSelect(); setStatus(`Plantilla “${name}” guardada.`,"ok"); }
+  catch(e){setStatus("No se pudo guardar la plantilla: "+e.message,"bad");}
+}
+async function doDelTpl(){
+  if(!CUR_TPL || !confirm(`¿Eliminar la plantilla “${TPLS[CUR_TPL]?.name||CUR_TPL}”?`)) return;
+  try{
+    await api("/templates/"+encodeURIComponent(CUR_TPL),{method:"DELETE"});
+    CUR_TPL=null; await refreshTemplates();
+    if(CUR_TPL) applyTpl(TPLS[CUR_TPL]);
+    setStatus("Plantilla eliminada.","ok");
+  }catch(e){setStatus("No se pudo eliminar: "+e.message,"bad");}
+}
+async function doActivateTpl(){
+  if(!CUR_TPL) return setStatus("Guarda primero la plantilla.","warn");
+  try{
+    await doSaveTpl();
+    const r=await api("/templates/"+encodeURIComponent(CUR_TPL)+"/activate",{method:"POST"});
+    ACTIVE_TPL=r.active; renderTplSelect();
+    setStatus(`El API usa ahora “${TPLS[CUR_TPL]?.name||CUR_TPL}”.`,"ok");
+  }catch(e){setStatus("No se pudo activar: "+e.message,"bad");}
+}
+// El diseño se guarda solo (en la plantilla elegida) al cambiar, y se carga al abrir.
 let tplReady=false, autosaveTimer=0;
 function scheduleAutosave(){
-  if(!db || !tplReady) return;
+  if(!tplReady || !CUR_TPL) return;
   clearTimeout(autosaveTimer);
-  autosaveTimer=setTimeout(()=>{ saveTplDB(tplSnapshot()).catch(()=>{}); },600);
+  const id=CUR_TPL;
+  autosaveTimer=setTimeout(()=>{ putTpl(id,TPLS[id]?.name||id).catch(()=>{}); },800);
 }
-async function doLoadTpl(){
-  const s=await loadTplDB(); if(!s){setStatus("No hay plantilla guardada.","warn");return;}
-  applyTpl(s); setStatus("Plantilla cargada.","ok");
-}
+$("#tpl-select").addEventListener("change",e=>{
+  const id=e.target.value; if(!id||!TPLS[id]) return;
+  clearTimeout(autosaveTimer); CUR_TPL=id; applyTpl(TPLS[id]);
+  setStatus(`Plantilla “${TPLS[id].name||id}” cargada.`,"ok");
+});
 function applyTpl(s){
   $("#t-org").value=s.org||""; $("#t-title").value=s.title||"";
   $("#t-band").value=s.band||"#1e40af"; $("#t-accent").value=s.accent||"#1e40af";
@@ -724,7 +793,9 @@ function applyTpl(s){
   render();
 }
 $("#save-tpl").addEventListener("click",doSaveTpl);
-$("#load-tpl").addEventListener("click",doLoadTpl);
+$("#new-tpl").addEventListener("click",doNewTpl);
+$("#del-tpl").addEventListener("click",doDelTpl);
+$("#activate-tpl").addEventListener("click",doActivateTpl);
 
 /* ---------- Estatus ---------- */
 function setStatus(msg,cls=""){const s=$("#status");s.textContent=msg;s.className="status "+cls;}
@@ -967,6 +1038,7 @@ async function sendToApi(card){
       face(frontHTML,false,"k"),     face(backHTML,rot,"k")]);
     const fd=new FormData();
     fd.append("printer_id",cfg.printer);
+    if(CUR_TPL) fd.append("template_id",CUR_TPL);   // si no, el API usa la plantilla activa
     fd.append("front",front,"front.png"); fd.append("back",back,"back.png");
     // Capa negra aparte (1 bit, mismo tamaño): el puente la imprime por el panel K
     fd.append("front_k",frontK,"front_k.png"); fd.append("back_k",backK,"back_k.png");
@@ -1051,7 +1123,7 @@ async function generate(register){
     const existing=all.find(c=>digits(c.data.ced)===digits(d.ced) && statusOf(c)==="vig");
     if(existing && !confirm(`La cédula ${d.ced} ya tiene un carnet vigente (${existing.control}). ¿Emitir otro?`)) return;
     const control=nextControl(all);
-    card={control,createdAt:Date.now(),prints:1,voided:false,
+    card={control,createdAt:Date.now(),prints:1,voided:false,templateId:CUR_TPL,
       tpl:t,data:d,img:{logo1:img.logo1,logo2:img.logo2,seal:img.seal,sign:img.sign,photo:img.photo}};
     await putCard(card);
     setStatus(`Carnet ${control} registrado.`,"ok");
@@ -1086,6 +1158,7 @@ async function lookup(ced){
   const matches=all.filter(c=>digits(c.data.ced)===digits(ced)).sort((a,b)=>b.control.localeCompare(a.control));
   if(!matches.length){setStatus("No hay carnet registrado con esa cédula.","warn");return;}
   const c=matches[0], d=c.data, t=c.tpl;
+  clearTimeout(autosaveTimer); CUR_TPL=null; renderTplSelect();
   $("#d-name").value=d.name; $("#d-ced").value=d.ced; $("#d-code").value=d.code;
   $("#d-cat").value=d.cat; $("#d-extra").value=d.extra||""; $("#d-issue").value=d.issue;
   // plantilla e imágenes del carnet
@@ -1151,16 +1224,16 @@ function download(name,type,content){
   loadApiCfg();
   applyPrinter(false);
   if(restoreDraft()) setStatus("Se recuperó el borrador del titular sin imprimir.","ok");
-  // La tarjeta se dibuja aunque el registro (IndexedDB) no esté disponible,
-  // p. ej. si el archivo se abre como data: o en una ventana privada.
+  // La tarjeta se dibuja aunque el middleware no responda (p. ej. archivo abierto sin el .exe).
   render();
   try{
-    await openDB();
-    const saved=await loadTplDB(); if(saved) applyTpl(saved);
+    await refreshTemplates();
+    await migrateLegacy(); await refreshTemplates();
+    if(CUR_TPL) applyTpl(TPLS[CUR_TPL]);
     tplReady=true;
     await renderRegistry();
   }
-  catch{ setStatus("Registro no disponible en este navegador: ábrelo desde http://localhost:8787/ui/ para guardar carnets.","warn"); }
+  catch(e){ setStatus("Sin conexión con el middleware ("+e.message+"): abre la página desde el .exe (http://localhost:8787/ui/…) y revisa la API key en “Conexión al middleware”.","warn"); }
 })();
 })();
 </script>
