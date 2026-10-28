@@ -21,7 +21,6 @@ class BridgeAdapter(PrinterAdapter):
     """
 
     confirms_completion = True
-    accepts_faces = True
     vendor = "SDK"
     default_bridge: Path
     # Opciones por trabajo -> argumento del puente. Banderas: "true"/"false".
@@ -66,7 +65,7 @@ class BridgeAdapter(PrinterAdapter):
 
     def submit(self, request: PrintRequest) -> str:
         args = self._option_args(request.options)
-        if not request.faces:
+        if not {"front", "back"} <= set(request.faces):
             raise PrintError("El puente imprime directo: faltan las imágenes front/back")
         for key in ("front", "back", "front_k", "back_k"):
             if key in request.faces:

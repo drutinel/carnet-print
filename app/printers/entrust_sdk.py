@@ -22,7 +22,7 @@ DEFAULT_BRIDGE = find_bridge()
 class EntrustSdkAdapter(BridgeAdapter):
     """Entrust Sigma DS3 por el SDK del driver XPS (bridge/CardBridge.exe).
 
-    A diferencia del conector SumatraPDF, fija opciones por trabajo con Print Ticket
+    Fija opciones por trabajo con Print Ticket
     (giro por cara, topcoat, desactivar una cara, tolva) y espera a que la impresora
     confirme que la tarjeta salió.
     """

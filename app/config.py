@@ -11,9 +11,7 @@ class PrinterConfig(BaseModel):
     id: str
     label: str
     adapter: str = "cups"
-    queue: str | None = None  # adapter cups
-    printer_name: str | None = None  # adapter windows
-    sumatra_path: str | None = None  # adapter windows
+    printer_name: str | None = None  # nombre de la impresora en Windows (entrust-sdk) o informativo (zebra-sdk)
     # adapters entrust-sdk / zebra-sdk (por defecto bridge/bin/CardBridge.exe / bridge/zbin/ZebraBridge.exe)
     bridge_path: str | None = None
     # opción CUPS -> valores permitidos (lista vacía = cualquier valor)

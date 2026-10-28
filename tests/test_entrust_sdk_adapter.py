@@ -41,7 +41,7 @@ def test_submit_renders_faces_and_maps_options(monkeypatch, bridge, pdf):
     calls = []
     monkeypatch.setattr(entrust_sdk.subprocess, "run", _fake_run(calls, {"ok": True, "printerJobId": 7}))
     opts = {"rotate_back": "true", "rotate_front": "false", "topcoat_front": "all"}
-    job = EntrustSdkAdapter("XPS Card Printer", bridge).submit(PrintRequest(None, 2, opts, faces=pdf))
+    job = EntrustSdkAdapter("XPS Card Printer", bridge).submit(PrintRequest(2, opts, faces=pdf))
     assert job == "entrust:7,7"
     cmd = calls[0]
     assert cmd[:2] == [bridge, "print"]
@@ -54,17 +54,17 @@ def test_submit_renders_faces_and_maps_options(monkeypatch, bridge, pdf):
 def test_submit_raises_printer_error(monkeypatch, bridge, pdf):
     monkeypatch.setattr(entrust_sdk.subprocess, "run", _fake_run([], {"ok": False, "error": "sin tarjetas"}))
     with pytest.raises(PrintError, match="sin tarjetas"):
-        EntrustSdkAdapter("P", bridge).submit(PrintRequest(None, 1, {}, faces=pdf))
+        EntrustSdkAdapter("P", bridge).submit(PrintRequest(1, {}, faces=pdf))
 
 
 def test_submit_rejects_unknown_option(bridge, pdf):
     with pytest.raises(PrintError, match="no soportada"):
-        EntrustSdkAdapter("P", bridge).submit(PrintRequest(None, 1, {"RibbonName": "x"}, faces=pdf))
+        EntrustSdkAdapter("P", bridge).submit(PrintRequest(1, {"RibbonName": "x"}, faces=pdf))
 
 
 def test_missing_bridge(tmp_path, pdf):
     with pytest.raises(PrintError, match="CardBridge"):
-        EntrustSdkAdapter("P", str(tmp_path / "nope.exe")).submit(PrintRequest(None, 1, {}, faces=pdf))
+        EntrustSdkAdapter("P", str(tmp_path / "nope.exe")).submit(PrintRequest(1, {}, faces=pdf))
 
 
 @pytest.mark.parametrize(

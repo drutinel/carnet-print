@@ -1,5 +1,4 @@
 import io
-import zlib
 
 from PIL import Image, UnidentifiedImageError
 
@@ -44,61 +43,6 @@ def png_bytes(image: Image.Image) -> bytes:
     out = io.BytesIO()
     image.save(out, format="PNG", dpi=(DPI, DPI))
     return out.getvalue()
-
-
-def images_to_pdf(images: list[Image.Image]) -> bytes:
-    """PDF sin pérdida: una página por imagen, RGB 8 bits con FlateDecode, tamaño = px / 300 ppp.
-
-    Pillow guarda RGB en PDF como JPEG (DCTDecode); aquí se escribe a mano para no perder
-    calidad en los bordes del texto.
-    """
-    objects: list[bytes] = []  # objeto n = objects[n - 1]
-
-    def add(body: bytes) -> int:
-        objects.append(body)
-        return len(objects)
-
-    catalog, pages = add(b""), add(b"")
-    kids = []
-    for image in images:
-        rgb = image.convert("RGB")
-        w, h = rgb.size
-        data = zlib.compress(rgb.tobytes(), 9)
-        img = add(
-            b"<< /Type /XObject /Subtype /Image /Width %d /Height %d /ColorSpace /DeviceRGB"
-            b" /BitsPerComponent 8 /Filter /FlateDecode /Length %d >>\nstream\n%s\nendstream"
-            % (w, h, len(data), data)
-        )
-        pw, ph = w * 72 / DPI, h * 72 / DPI
-        content = b"q %.4f 0 0 %.4f 0 0 cm /Im0 Do Q" % (pw, ph)
-        stream = add(b"<< /Length %d >>\nstream\n%s\nendstream" % (len(content), content))
-        kids.append(add(
-            b"<< /Type /Page /Parent %d 0 R /MediaBox [0 0 %.4f %.4f]"
-            b" /Resources << /XObject << /Im0 %d 0 R >> >> /Contents %d 0 R >>"
-            % (pages, pw, ph, img, stream)
-        ))
-    objects[catalog - 1] = b"<< /Type /Catalog /Pages %d 0 R >>" % pages
-    objects[pages - 1] = b"<< /Type /Pages /Kids [%s] /Count %d >>" % (
-        b" ".join(b"%d 0 R" % k for k in kids), len(kids))
-
-    out = io.BytesIO()
-    out.write(b"%PDF-1.4\n%\xe2\xe3\xcf\xd3\n")
-    offsets = []
-    for n, body in enumerate(objects, start=1):
-        offsets.append(out.tell())
-        out.write(b"%d 0 obj\n%s\nendobj\n" % (n, body))
-    xref = out.tell()
-    out.write(b"xref\n0 %d\n0000000000 65535 f \n" % (len(objects) + 1))
-    for off in offsets:
-        out.write(b"%010d 00000 n \n" % off)
-    out.write(b"trailer\n<< /Size %d /Root %d 0 R >>\nstartxref\n%d\n%%%%EOF\n"
-              % (len(objects) + 1, catalog, xref))
-    return out.getvalue()
-
-
-def faces_to_pdf(front: bytes, back: bytes) -> bytes:
-    """PDF sin pérdida de 2 páginas (frente, reverso); el tamaño sale de píxeles / DPI."""
-    return images_to_pdf([load_face(front), load_face(back)])
 
 
 def normalize_faces(raw: dict[str, bytes]) -> dict[str, bytes]:

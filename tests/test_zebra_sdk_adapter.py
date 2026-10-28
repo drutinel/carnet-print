@@ -41,7 +41,7 @@ def test_submit_maps_options_and_faces(monkeypatch, bridge, pdf):
     calls = []
     monkeypatch.setattr(zebra_sdk.subprocess, "run", _fake_run(calls, {"ok": True, "printerJobId": 12}))
     opts = {"back_type": "mono", "overlay_back": "false"}
-    job = ZebraSdkAdapter("Zebra ZC300 USB Card Printer", bridge).submit(PrintRequest(None, 1, opts, faces=pdf))
+    job = ZebraSdkAdapter("Zebra ZC300 USB Card Printer", bridge).submit(PrintRequest(1, opts, faces=pdf))
     assert job == "zebra:12"
     cmd = calls[0]
     assert cmd[:2] == [bridge, "print"]
@@ -53,17 +53,17 @@ def test_submit_maps_options_and_faces(monkeypatch, bridge, pdf):
 def test_submit_raises_printer_error(monkeypatch, bridge, pdf):
     monkeypatch.setattr(zebra_sdk.subprocess, "run", _fake_run([], {"ok": False, "error": "4003 Out of cards"}))
     with pytest.raises(PrintError, match="Out of cards"):
-        ZebraSdkAdapter("P", bridge).submit(PrintRequest(None, 1, {}, faces=pdf))
+        ZebraSdkAdapter("P", bridge).submit(PrintRequest(1, {}, faces=pdf))
 
 
 def test_submit_rejects_unknown_option(bridge, pdf):
     with pytest.raises(PrintError, match="no soportada"):
-        ZebraSdkAdapter("P", bridge).submit(PrintRequest(None, 1, {"RibbonName": "x"}, faces=pdf))
+        ZebraSdkAdapter("P", bridge).submit(PrintRequest(1, {"RibbonName": "x"}, faces=pdf))
 
 
 def test_missing_bridge(tmp_path, pdf):
     with pytest.raises(PrintError, match="ZebraBridge"):
-        ZebraSdkAdapter("P", str(tmp_path / "ZebraBridge.exe")).submit(PrintRequest(None, 1, {}, faces=pdf))
+        ZebraSdkAdapter("P", str(tmp_path / "ZebraBridge.exe")).submit(PrintRequest(1, {}, faces=pdf))
 
 
 @pytest.mark.parametrize(
@@ -79,7 +79,7 @@ def test_status(monkeypatch, bridge, reply, expected):
 def test_copies_go_in_one_job(monkeypatch, bridge, pdf):
     calls = []
     monkeypatch.setattr(zebra_sdk.subprocess, "run", _fake_run(calls, {"ok": True, "printerJobId": 5}))
-    job = ZebraSdkAdapter("P", bridge).submit(PrintRequest(None, 3, {"auto_k": "true"}, faces=pdf))
+    job = ZebraSdkAdapter("P", bridge).submit(PrintRequest(3, {"auto_k": "true"}, faces=pdf))
     assert job == "zebra:5"
     assert len(calls) == 1
     cmd = calls[0]
@@ -90,7 +90,7 @@ def test_copies_go_in_one_job(monkeypatch, bridge, pdf):
 def test_single_copy_has_no_copies_flag(monkeypatch, bridge, pdf):
     calls = []
     monkeypatch.setattr(zebra_sdk.subprocess, "run", _fake_run(calls, {"ok": True, "printerJobId": 6}))
-    ZebraSdkAdapter("P", bridge).submit(PrintRequest(None, 1, {"auto_k": "false"}, faces=pdf))
+    ZebraSdkAdapter("P", bridge).submit(PrintRequest(1, {"auto_k": "false"}, faces=pdf))
     assert "--copies" not in calls[0] and "--auto-k" not in calls[0]
 
 

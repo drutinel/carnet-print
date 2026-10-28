@@ -67,13 +67,13 @@ def test_submit_raises_operator_message(monkeypatch, exe, faces, adapter_cls, mo
     calls = []
     monkeypatch.setattr(module.subprocess, "run", _run(calls, reply))
     with pytest.raises(PrintError, match=expected):
-        adapter_cls("P", exe).submit(PrintRequest(None, 1, {}, faces=faces))
+        adapter_cls("P", exe).submit(PrintRequest(1, {}, faces=faces))
 
 
 def test_print_passes_recover_wait_and_covers_it_in_timeout(monkeypatch, exe, faces):
     calls = []
     monkeypatch.setattr(entrust_sdk.subprocess, "run", _run(calls, {"ok": True, "printerJobId": 5}))
-    EntrustSdkAdapter("P", exe).submit(PrintRequest(None, 1, {}, faces=faces))
+    EntrustSdkAdapter("P", exe).submit(PrintRequest(1, {}, faces=faces))
     cmd, kw = calls[0]
     assert cmd[cmd.index("--recover-wait") + 1] == str(bridge.RECOVER_WAIT_S)
     bridge_timeout = int(cmd[cmd.index("--timeout") + 1])

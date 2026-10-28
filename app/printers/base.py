@@ -9,19 +9,15 @@ class PrintError(Exception):
 
 @dataclass(frozen=True)
 class PrintRequest:
-    pdf_path: Path | None
     copies: int
     options: dict[str, str]
-    # PNG por cara (front, back, front_k, back_k) para adaptadores con accepts_faces;
-    # si viene, pdf_path es None
-    faces: dict[str, Path] | None = None
+    # PNG por cara: front, back y, opcionales, front_k / back_k (capa negra, panel K)
+    faces: dict[str, Path]
 
 
 class PrinterAdapter(ABC):
     # True si submit() vuelve cuando la tarjeta ya se imprimió, no solo cuando se encoló
     confirms_completion = False
-    # True si submit() acepta request.faces (PNG nativos) en vez de un PDF
-    accepts_faces = False
 
     @abstractmethod
     def submit(self, request: PrintRequest) -> str:
