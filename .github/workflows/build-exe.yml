@@ -115,7 +115,13 @@ jobs:
             $card = Invoke-RestMethod -Method Post http://127.0.0.1:8787/cards -Headers @{ "X-API-Key" = $key } `
                       -ContentType "application/json" -Body '{"tpl":{"prefix":"T-"},"data":{"name":"Prueba"},"img":{}}'
             if ($card.control -ne "C-000001" -or $card.data.code -ne "T-000001") { throw "El alta de carnets no devolvió control/código: $($card | ConvertTo-Json)" }
-            Write-Host "OK: /health ($($health.version)), la web, los archivos de la primera ejecución y el API"
+            # La línea de comandos dentro del .exe: lista las impresoras (por el programa abierto) y rechaza una petición vacía con código 2
+            $exe = Join-Path $dir "CarnetPrint.exe"
+            $listed = (& $exe printers --json) | ConvertFrom-Json
+            if ($LASTEXITCODE -ne 0 -or $listed[0].id -ne "entrust-sigma-ds3") { throw "CarnetPrint.exe printers falló (código $LASTEXITCODE)" }
+            & $exe print --json | Out-Null
+            if ($LASTEXITCODE -ne 2) { throw "CarnetPrint.exe print sin fuente debía salir con código 2 y salió con $LASTEXITCODE" }
+            Write-Host "OK: /health ($($health.version)), la web, los archivos de la primera ejecución, el API y la línea de comandos"
           } finally {
             taskkill /F /T /PID $p.Id | Out-Null   # el .exe de PyInstaller lanza un proceso hijo
             Get-Content (Join-Path $dir "out.log"), (Join-Path $dir "err.log") -ErrorAction SilentlyContinue

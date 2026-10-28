@@ -53,6 +53,30 @@ Para respaldar o mover el programa basta copiar la carpeta completa (con `images
 
 **Si se cierra o se reinicia el programa no se pierde lo que estabas llenando:** el borrador se guarda en el servidor y vuelve solo, aunque abras la web desde otro navegador o puerto. El botón **«Continuar desde el último»** carga los datos del último carnet emitido (el código y la fecha son nuevos). Las fotos se reducen a 800 px al subirlas, así que una foto de celular no supera el límite.
 
+### Línea de comandos (impresión directa)
+
+`CarnetPrint.exe` también se maneja sin la web, para scripts o reimpresiones. Imprime **PNG ya hechos** (los mismos
+que el programa archiva en `png\`):
+
+```powershell
+# dos caras (y, si quieres, las capas negras)
+CarnetPrint.exe print --front frente.png --back reverso.png [--front-k fk.png --back-k rk.png]
+# reimprimir un trabajo archivado, o un carnet registrado con su último PNG
+CarnetPrint.exe print --png-dir png\20261028-131500_C-000001
+CarnetPrint.exe print --card C-000001
+# otras opciones
+CarnetPrint.exe print --card C-000001 --copies 2 --printer entrust-sigma-ds3 --json
+CarnetPrint.exe printers --json        # impresoras y su estado
+```
+
+- Usa las mismas opciones que la web (calidad, tolva, split ribbon de **Avanzado**, en `settings.json`); con
+  `--option CLAVE=VALOR` se usan solo las que indiques. Los desplazamientos X/Y ya van dentro de los PNG.
+- Si el programa está abierto, el trabajo pasa por **su cola** (dos impresiones nunca se pisan); si no, imprime directo.
+- `--card` cuenta una reimpresión solo si la tarjeta salió bien.
+- `--json` da una sola línea parseable. **Códigos de salida:** `0` impreso, `1` falló o se agotó la espera, `2` petición inválida
+  (archivo que no existe, opción no permitida…).
+- Armar el carnet a partir de datos (nombre, cédula…) sigue siendo cosa de la web: la tarjeta se dibuja en el navegador.
+
 ### Layout de la tarjeta (rótulos, ajuste de texto y márgenes)
 
 En **Diseño de la plantilla > Campos y márgenes de la tarjeta** se cambia, por plantilla: el rótulo de cada campo

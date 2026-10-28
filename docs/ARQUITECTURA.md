@@ -15,9 +15,11 @@ Todo corre en la misma PC, junto a `CarnetPrint.exe`. El navegador dibuja el car
 
 | Módulo | Responsabilidad |
 |---|---|
-| `server.py`, `run_exe.py` | Punto de entrada del `.exe`: crea la config, comprueba requisitos, levanta el API |
+| `server.py`, `run_exe.py` | Punto de entrada del `.exe`: crea la config, comprueba requisitos, levanta el API. Si el primer argumento es `print` o `printers`, delega en `cli.py` |
+| `cli.py` | Línea de comandos (`print`, `printers`): imprime PNG sin la web; reenvía al programa abierto si lo hay |
+| `services.py` | `submit_print`: valida, archiva y encola un trabajo. Lo usan `POST /jobs` y la CLI; también las opciones por defecto de `settings.json` |
 | `main.py` | `create_app()`: arma el contexto y monta los routers |
-| `routes/` | Un router por tema (`jobs`, `cards`, `templates`, `clients`, `settings`, `printers`, `pages`, `system`). Delgados: validan y delegan |
+| `routes/` | Un router por tema (`jobs`, `cards`, `templates`, `clients`, `draft`, `settings`, `printers`, `pages`, `system`). Delgados: validan y delegan |
 | `schemas.py` | Esquemas pydantic de toda entrada JSON, con límites de tamaño |
 | `deps.py` | Autenticación: `Principal` (administrador con la API key, o kiosko con su token) y los permisos `require_*` |
 | `store.py` | Los cuatro JSON (escritura atómica con lock) y `images/` (imágenes por hash). Asigna controles |

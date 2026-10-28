@@ -465,8 +465,13 @@ async function loadSettings(){
 function saveSettings(){
   if(KIOSK) return;   // el kiosko nunca modifica la configuración
   clearTimeout(settingsTimer);
-  settingsTimer=setTimeout(()=>jsonPut("/settings",SETTINGS).catch(
-    e=>setStatus("No se pudo guardar el ajuste: "+e.message,"bad")),500);
+  settingsTimer=setTimeout(()=>{ settingsTimer=0; jsonPut("/settings",SETTINGS).catch(
+    e=>setStatus("No se pudo guardar el ajuste: "+e.message,"bad")); },500);
+}
+async function flushSettings(){
+  if(KIOSK || !settingsTimer) return;
+  clearTimeout(settingsTimer); settingsTimer=0;
+  await jsonPut("/settings",SETTINGS);
 }
 async function loadPrinters(){
   PRINTER_LIST=await api("/printers");
@@ -614,15 +619,6 @@ async function rasterizeFace(cardHTML,{rotate,ox,oy,w=CANVAS.w,h=CANVAS.h,layer=
   return new Promise((res,rej)=>c.toBlob(b=>b?res(b):rej(new Error("No se pudo generar la imagen")),"image/png"));
 }
 
-// Opciones por trabajo: salen de «Avanzado»; solo viajan las que la impresora permite.
-function apiOptions(allowed){
-  const o=SETTINGS.quality==="fine"
-    ? {print_mode:"custom",color_dpi:"300x300",mono_dpi:"300x600"} : {print_mode:"standard"};
-  if(SETTINGS.hopper) o.hopper=SETTINGS.hopper;
-  if($("#opt-split").checked) o.split_ribbon="ymct_k";
-  return Object.fromEntries(Object.entries(o).filter(([k,v])=>
-    k in allowed && (!allowed[k].length || allowed[k].includes(v))));
-}
 // Genera los PNG de las caras, los manda a imprimir y espera a que la tarjeta salga.
 // Devuelve true si se imprimió; si no, deja el motivo en la barra de estado.
 async function runJob({frontHTML,backHTML,control=null,withK=true,templateId=CUR_TPL}){
@@ -645,9 +641,8 @@ async function runJob({frontHTML,backHTML,control=null,withK=true,templateId=CUR
       const [frontK,backK]=await Promise.all([face(frontHTML,false,"k"),face(backHTML,rot,"k")]);
       fd.append("front_k",frontK,"front_k.png"); fd.append("back_k",backK,"back_k.png");
     }
-    // Sin las opciones permitidas no se sabe qué enviar: se corta en vez de imprimir con otra calidad
-    const allowed=await api("/printers/"+encodeURIComponent(printer.id)+"/options");
-    fd.append("options",JSON.stringify(apiOptions(allowed)));
+    // Sin «options» el servidor usa las de «Avanzado» (calidad, tolva, split ribbon): las mismas que la línea de comandos
+    await flushSettings();   // un ajuste cambiado hace un instante debe estar guardado antes de imprimir
     const r=await fetch(apiBase()+"/jobs",{method:"POST",headers:apiHeaders(),body:fd});
     if(r.status===401){ setStatus("API key inválida (abre «Avanzado» > Conexión).","bad"); return false; }
     if(!r.ok){const e=await r.json().catch(()=>({})); setStatus("Error del middleware: "+(e.detail||r.status),"bad"); return false;}

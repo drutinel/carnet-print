@@ -15,7 +15,13 @@ from .version import VERSION
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="CarnetPrint")
+    argv = sys.argv[1:] if argv is None else argv
+    if argv and argv[0] in ("print", "printers"):   # línea de comandos: imprime sin abrir la web
+        from . import cli
+        return cli.main(argv)
+    parser = argparse.ArgumentParser(
+        description="CarnetPrint. Sin argumentos abre el programa. Por línea de comandos: "
+                    "«print» (imprime PNG) y «printers»; ver «CarnetPrint.exe print --help».")
     parser.add_argument("--client", help="abre el generador preconfigurado de ese cliente (modo kiosko)")
     parser.add_argument("--version", action="version", version=f"CarnetPrint {VERSION}")
     args = parser.parse_args(argv)

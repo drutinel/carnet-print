@@ -14,20 +14,27 @@ from .status import StatusCache
 from .store import NotFound, Store, StoreError
 
 
-def create_app(settings: Settings | None = None) -> FastAPI:
-    settings = settings or Settings()
+def build_ctx(settings: Settings) -> Ctx:
+    """Impresoras, cola de trabajos y almacén: lo comparten el servidor y la línea de comandos."""
     registry = build_registry(load_printers(settings.printers_file))
-    job_service = JobService({pid: adapter for pid, (_, adapter) in registry.items()})
+    adapters = {pid: adapter for pid, (_, adapter) in registry.items()}
+    job_service = JobService(adapters)
     store = Store(settings.data_dir)
     store.compact()  # imágenes de JSON antiguos -> carpeta images/
-    ctx = Ctx(
+    return Ctx(
         settings=settings,
         registry=registry,
         jobs=job_service,
         store=store,
-        status=StatusCache({pid: adapter for pid, (_, adapter) in registry.items()}, job_service),
+        status=StatusCache(adapters, job_service),
         png_root=settings.png_dir or settings.data_dir / "png",
     )
+
+
+def create_app(settings: Settings | None = None) -> FastAPI:
+    settings = settings or Settings()
+    ctx = build_ctx(settings)
+    job_service = ctx.jobs
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
