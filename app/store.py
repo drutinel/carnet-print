@@ -55,6 +55,7 @@ class Store:
         )
         self._cards = JsonFile(data_dir / "carnets.json", {"cards": {}})
         self._settings = JsonFile(data_dir / "settings.json", {})
+        self._clients = JsonFile(data_dir / "clients.json", {"clients": {}})
 
     # --- plantillas ---
     def list_templates(self) -> dict:
@@ -125,3 +126,28 @@ class Store:
             data.update(body)
 
         return self._settings.update(mutate)
+
+    # --- clientes (modo kiosko): plantilla fija + campos editables, en clients.json ---
+    def list_clients(self) -> dict:
+        return self._clients.read().get("clients", {})
+
+    def get_client(self, client_id: str) -> dict:
+        client = self.list_clients().get(client_id)
+        if client is None:
+            raise NotFound("Cliente no existe")
+        return client
+
+    def put_client(self, client_id: str, body: dict) -> dict:
+        def mutate(data: dict) -> None:
+            data.setdefault("clients", {})[client_id] = body
+
+        self._clients.update(mutate)
+        return body
+
+    def delete_client(self, client_id: str) -> None:
+        def mutate(data: dict) -> None:
+            if client_id not in data.get("clients", {}):
+                raise NotFound("Cliente no existe")
+            del data["clients"][client_id]
+
+        self._clients.update(mutate)

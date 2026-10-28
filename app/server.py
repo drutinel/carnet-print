@@ -1,4 +1,5 @@
 """Punto de entrada del .exe: crea la config la primera vez, levanta el API y abre la UI."""
+import argparse
 import sys
 import threading
 import webbrowser
@@ -11,12 +12,16 @@ from .main import create_app
 from .paths import app_dir
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="CarnetPrint")
+    parser.add_argument("--client", help="abre el generador preconfigurado de ese cliente (modo kiosko)")
+    args = parser.parse_args(argv)
     new_key = ensure_config(app_dir())
     settings = Settings()
     if new_key:
         print(f"Primera ejecución. API key (también en {app_dir() / '.env'}): {new_key}")
-    url = f"http://localhost:{settings.port}/ui/generador-carnets.html"
+    base = f"http://localhost:{settings.port}"
+    url = f"{base}/c/{args.client}" if args.client else f"{base}/ui/generador-carnets.html"
     print(f"CarnetPrint en {url}\nDatos en {settings.data_dir} (templates.json, carnets.json)")
     if settings.open_browser:
         threading.Timer(1.5, webbrowser.open, args=(url,)).start()

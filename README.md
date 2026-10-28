@@ -57,12 +57,24 @@ Junto al .exe, en la primera ejecución, se crean solos:
 | `printers.yaml` | Impresora Entrust (editar `printer_name` si hace falta) |
 | `templates.json` | Plantillas y cuál es la activa para el API |
 | `carnets.json` | Carnets generados (registro, reimpresiones, anulados) |
+| `settings.json` | Ajustes de «Avanzado»: impresora, calidad, tolva y calibración X/Y por impresora |
+| `clients.json` | Perfiles de cliente (modo kiosko) |
+| `png\` | Una carpeta por trabajo (`AAAAMMDD-HHMMSS_<control>`) con `front.png`, `back.png` y las capas K |
 
 API (todos con `X-API-Key`): imprime **directo**, sin PDF.
 - `POST /jobs`: `front` + `back` (PNG), `front_k`/`back_k` opcionales, `template_id` opcional
   (si no viene se usa la plantilla activa).
 - `GET /templates`, `PUT|GET|DELETE /templates/{id}`, `POST /templates/{id}/activate`.
 - `GET /cards`, `PUT /cards/{control}`.
+
+**Todo se imprime por el API** (PNG directo al SDK de la impresora); ya no hay impresión por el diálogo del
+navegador. La tarjeta de calibración también sale por el API.
+
+**Modo kiosko (por cliente):** en «Avanzado > Clientes» se crea un perfil (plantilla fija + campos que se pueden
+llenar). `http://localhost:8787/c/<cliente>` (o `CarnetPrint.exe --client <cliente>`) abre el generador ya
+configurado: sin diseño, sin ajustes, sin selector de plantilla; solo se llenan los campos permitidos. La API key
+solo se incrusta en la página si se abre desde la misma PC.
+`GET|PUT|DELETE /clients/{id}` administran los perfiles.
 
 Los datos de un navegador que usaba IndexedDB se suben solos al .exe la primera vez que se abre la UI.
 

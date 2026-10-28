@@ -1,12 +1,16 @@
 import hmac
 import json
+import re
+import uuid
+from datetime import datetime
 from typing import Annotated
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Body, Depends, FastAPI, File, Form, Header, HTTPException, Path as PathParam, UploadFile
+from fastapi import Body, Request, Depends, FastAPI, File, Form, Header, HTTPException, Path as PathParam, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -19,6 +23,9 @@ from .store import NotFound, Store, StoreError
 
 WEB_DIR = resource_dir() / "web"
 MAX_COPIES = 10
+LOOPBACK = {"127.0.0.1", "::1", "localhost"}
+# Campos del titular que un perfil de cliente puede dejar editables
+KIOSK_FIELDS = {"name", "ced", "cat", "extra", "code", "issue", "photo"}
 # id de plantilla / número de control: se usan como clave en el JSON y en la URL
 ItemId = Annotated[str, PathParam(pattern=r"^[\w\-. ]{1,64}$")]
 
@@ -37,6 +44,19 @@ class JobOut(BaseModel):
     backend_job_id: str | None = None
     error: str | None = None
     template_id: str | None = None
+    png_dir: str | None = None  # carpeta (dentro de png/) con las imágenes de este trabajo
+
+
+def _png_stem(control: str | None) -> str:
+    """`20261028-131500_C-000001`: carpeta del trabajo; sin control, un id corto."""
+    tag = re.sub(r"[^\w\-.]", "_", control or "")[:64] or uuid.uuid4().hex[:8]
+    return f"{datetime.now():%Y%m%d-%H%M%S}_{tag}"
+
+
+def _save_pngs(folder: Path, faces: dict[str, bytes]) -> None:
+    folder.mkdir(parents=True, exist_ok=True)
+    for key, data in faces.items():
+        (folder / f"{key}.png").write_bytes(data)
 
 
 def _job_out(job: Job) -> JobOut:
@@ -48,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     registry = build_registry(load_printers(settings.printers_file))
     jobs = JobService({pid: adapter for pid, (_, adapter) in registry.items()})
     store = Store(settings.data_dir)
+    png_root = settings.png_dir or settings.data_dir / "png"
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -94,6 +115,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         copies: int = Form(1, ge=1, le=MAX_COPIES),
         options: str = Form("{}"),
         template_id: str | None = Form(None),
+        control: str | None = Form(None),
     ) -> JobOut:
         """Imprime directo: `front` y `back` en PNG (sin PDF), más `front_k` / `back_k`
         opcionales (capa negra, panel K, mismo tamaño que su cara).
@@ -122,12 +144,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 raw[key] = await read_limited(upload)
         data: bytes | None = None
         try:
-            faces: dict[str, bytes] | None = await run_in_threadpool(normalize_faces, raw)
-            if not adapter.accepts_faces:  # CUPS/Windows imprimen un PDF armado aquí
-                data = await run_in_threadpool(faces_to_pdf, faces["front"], faces["back"])
-                faces = None
+            normalized = await run_in_threadpool(normalize_faces, raw)
         except ImageError as exc:
             raise HTTPException(status_code=422, detail=str(exc)) from exc
+        faces: dict[str, bytes] | None = normalized
+        if not adapter.accepts_faces:  # CUPS/Windows imprimen un PDF armado aquí
+            data = await run_in_threadpool(faces_to_pdf, normalized["front"], normalized["back"])
+            faces = None
 
         try:
             parsed = json.loads(options)
@@ -146,11 +169,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 status_code=422, detail=f"Opciones o valores no permitidos: {rejected}"
             )
 
+        # Archivo de lo que se manda a imprimir; si no se puede guardar, no se imprime
+        png_dir = png_root / _png_stem(control)
+        try:
+            await run_in_threadpool(_save_pngs, png_dir, normalized)
+        except OSError as exc:
+            raise HTTPException(status_code=500, detail=f"No se pudo guardar el PNG: {exc}") from exc
+
         job = jobs.enqueue(
             printer_id, data, copies, {k: str(v) for k, v in parsed.items()},
             faces=faces, template_id=template_id,
         )
-        return _job_out(job)
+        return JobOut(**job.__dict__, png_dir=png_dir.name)
 
     # --- plantillas y carnets generados: JSON junto al .exe (templates.json, carnets.json) ---
     def store_call(fn, *args):
@@ -182,6 +212,53 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def activate_template(template_id: ItemId) -> dict:
         store_call(store.activate_template, template_id)
         return store.list_templates()
+
+    def validate_client(body: dict) -> dict:
+        name = str(body.get("name", "")).strip()
+        if not name:
+            raise HTTPException(status_code=422, detail="Falta el nombre del cliente")
+        if body.get("template_id") not in store.list_templates()["templates"]:
+            raise HTTPException(status_code=422, detail="Plantilla no existe")
+        editable = body.get("editable", [])
+        if not isinstance(editable, list) or not set(editable) <= KIOSK_FIELDS:
+            raise HTTPException(
+                status_code=422, detail=f"editable debe ser una lista de {sorted(KIOSK_FIELDS)}"
+            )
+        return {
+            "name": name,
+            "template_id": body["template_id"],
+            "editable": sorted(set(editable)),
+            "show_registry": bool(body.get("show_registry", False)),
+        }
+
+    @app.get("/clients", dependencies=[Depends(require_key)])
+    def list_clients() -> dict:
+        return store_call(store.list_clients)
+
+    @app.put("/clients/{client_id}", dependencies=[Depends(require_key)])
+    def put_client(client_id: ItemId, body: dict = Body(...)) -> dict:
+        return store_call(store.put_client, client_id, validate_client(body))
+
+    @app.delete("/clients/{client_id}", status_code=204, dependencies=[Depends(require_key)])
+    def delete_client(client_id: ItemId) -> None:
+        store_call(store.delete_client, client_id)
+
+    @app.get("/c/{client_id}", response_class=HTMLResponse)
+    def kiosk_page(client_id: ItemId, request: Request) -> HTMLResponse:
+        """El generador ya configurado para un cliente: plantilla fija y solo sus campos editables.
+
+        La API key solo se incrusta si el navegador está en la misma PC (loopback); desde otra
+        máquina la página la pide.
+        """
+        client = store_call(store.get_client, client_id)
+        host = request.client.host if request.client else ""
+        kiosk = {"id": client_id, **client, "api_key": settings.api_key if host in LOOPBACK else ""}
+        page = (WEB_DIR / "generador-carnets.html").read_text(encoding="utf-8")
+        inject = "<script>window.KIOSK=" + json.dumps(kiosk).replace("</", "<\\/") + "</script>\n"
+        return HTMLResponse(
+            page.replace("<script>\n(() => {", inject + "<script>\n(() => {", 1),
+            headers={"Cache-Control": "no-store"},
+        )
 
     @app.get("/settings", dependencies=[Depends(require_key)])
     def get_settings() -> dict:

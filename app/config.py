@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     printers_file: Path = app_dir() / "printers.yaml"
     data_dir: Path = app_dir()  # templates.json y carnets.json
     max_upload_bytes: int = 5 * 1024 * 1024
+    png_dir: Path | None = None  # PNG de cada trabajo; por defecto data_dir/png
     host: str = "127.0.0.1"
     port: int = 8787
     open_browser: bool = True

@@ -6,3 +6,6 @@ carnets.json
 build/
 dist/
 .venv-build/
+settings.json
+clients.json
+png/

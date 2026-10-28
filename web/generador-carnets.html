@@ -180,30 +180,20 @@
   .stats{font-size:11px;color:var(--muted);text-transform:none;letter-spacing:0}
 
   /* ---- Impresión ---- */
-  #print-area{display:none}
-  @media print{
-    body *{visibility:hidden}
-    #print-area,#print-area *{visibility:visible}
-    #print-area{display:block;position:absolute;inset:0;background:#fff}
-    .pg-cr80{width:85.6mm;height:54mm;page-break-after:always;position:relative;overflow:hidden;margin:0}
-    .pg-carta{width:210mm;min-height:297mm;page-break-after:always;padding:18mm 12mm;position:relative}
-    .carta-card{width:85.6mm;height:54mm;position:relative;overflow:hidden;
-      outline:1px dashed #bbb;margin:0 auto 10mm}
-    @page{size:auto;margin:0}
-  }
+  body.kiosk .admin-only{display:none!important}
   @media (max-width:860px){.wrap{grid-template-columns:1fr}.sticky{position:static}}
 </style>
 </head>
 <body>
 <header class="app">
   <h1>Generador de carnets</h1>
-  <div class="hdr-tpl">
+  <div class="hdr-tpl admin-only">
     <label for="tpl-select">Plantilla</label>
     <select id="tpl-select" title="Plantilla en uso (★ = la que usa el API)"></select>
   </div>
   <span class="spacer"></span>
   <span class="chip" id="printer-chip" role="status" data-state="unknown">Impresora: …</span>
-  <a class="btn sm" href="#advanced" id="open-adv">Avanzado</a>
+  <a class="btn sm admin-only" href="#advanced" id="open-adv">Avanzado</a>
 </header>
 
 <main class="wrap">
@@ -233,7 +223,7 @@
   <section class="panel" aria-labelledby="h-tit">
     <h2 id="h-tit"><span>Titular</span></h2>
     <div class="body">
-      <label class="field"><span>Buscar por cédula (trae el último carnet emitido)</span>
+      <label class="field" id="lookup-field"><span>Buscar por cédula (trae el último carnet emitido)</span>
         <div class="row nowrap">
           <input type="search" id="lookup-ced" placeholder="000-0000000-0" inputmode="numeric">
           <button class="btn sm" id="lookup-btn" type="button">Traer</button>
@@ -247,18 +237,18 @@
       </div>
       <label class="field"><span>Dato extra (opcional)</span>
         <input type="text" id="d-extra" placeholder="Tipo de sangre, área…"></label>
-      <div class="asset" data-key="photo" data-label="Foto del titular"></div>
+      <div class="asset" id="photo-asset" data-key="photo" data-label="Foto del titular"></div>
 
       <div class="actions">
         <button class="btn primary" id="generate" type="button">Generar, registrar e imprimir</button>
-        <button class="btn" id="preview-print" type="button" title="Imprime sin guardar el carnet en el registro">Imprimir sin registrar</button>
+        <button class="btn admin-only" id="preview-print" type="button" title="Imprime sin guardar el carnet en el registro">Imprimir sin registrar</button>
       </div>
       <div class="status" id="status" role="status" aria-live="polite"></div>
     </div>
   </section>
 
   <!-- 3. Registro -->
-  <section class="panel full" aria-labelledby="h-reg">
+  <section class="panel full" id="registry" aria-labelledby="h-reg">
     <h2 id="h-reg"><span>Registro de carnets emitidos</span><span class="stats" id="stats"></span></h2>
     <div class="body">
       <div class="reg-tools">
@@ -281,7 +271,7 @@
   </section>
 
   <!-- 4. Diseño de la plantilla (se toca poco: plegado) -->
-  <details class="panel full" id="design">
+  <details class="panel full admin-only" id="design">
     <summary><span>Diseño de la plantilla</span><span class="chip" id="tpl-name">—</span></summary>
     <div class="body">
       <div class="tpl-bar">
@@ -362,17 +352,14 @@
   </details>
 
   <!-- 5. Avanzado: se guarda en settings.json junto al .exe -->
-  <details class="panel full" id="advanced">
+  <details class="panel full admin-only" id="advanced">
     <summary><span>Avanzado</span><span class="chip">Se guarda en el servidor (settings.json)</span></summary>
     <div class="body">
       <div class="cols">
         <fieldset class="group"><legend>Impresora y calidad</legend>
           <label class="field"><span>Imprimir en</span>
-            <select id="printer">
-              <option value="entrust-api">Entrust Sigma DS3 (directo, sin diálogo)</option>
-              <option value="carta">Hoja carta (prueba en pantalla)</option>
-            </select></label>
-          <div class="grid2" data-only-api>
+            <select id="printer"><option value="">(sin conexión)</option></select></label>
+          <div class="grid2">
             <label class="field"><span>Calidad</span>
               <select id="adv-quality">
                 <option value="fine">Texto nítido (K a 300×600)</option>
@@ -384,7 +371,7 @@
                 <option value="1">Tolva 1</option><option value="2">Tolva 2</option>
               </select></label>
           </div>
-          <label class="check" data-only-api title="Una sola tanda de cinta para ambas caras: frente a color, reverso solo negro. Ahorra cinta y tiempo.">
+          <label class="check" title="Una sola tanda de cinta para ambas caras: frente a color, reverso solo negro. Ahorra cinta y tiempo.">
             <input type="checkbox" id="opt-split"> Split ribbon (reverso solo negro)</label>
         </fieldset>
 
@@ -395,13 +382,37 @@
             <label class="field"><span>Desplazamiento Y (mm)</span>
               <input type="number" id="off-y" value="0" step="0.1"></label>
           </div>
-          <label class="check"><input type="checkbox" id="opt-bleed"> Sangrado borde a borde</label>
           <label class="check"><input type="checkbox" id="opt-rotate"> Girar reverso 180°</label>
           <div class="row" style="margin-bottom:10px">
             <button class="btn sm" id="cal-test" type="button">Imprimir tarjeta de calibración</button>
             <button class="btn sm" id="cal-reset" type="button">Restablecer</button>
           </div>
           <p class="note" id="printer-note" style="margin-top:0"></p>
+        </fieldset>
+
+        <fieldset class="group"><legend>Clientes (modo kiosko)</legend>
+          <label class="field"><span>Perfil</span>
+            <select id="cl-select"></select></label>
+          <label class="field"><span>Nombre del cliente</span>
+            <input type="text" id="cl-name" placeholder="Ej. Colegio San José"></label>
+          <label class="field"><span>Plantilla fija</span>
+            <select id="cl-tpl"></select></label>
+          <div class="field"><span>Campos que puede llenar</span>
+            <div class="grid2" id="cl-fields">
+              <label class="check"><input type="checkbox" value="name"> Nombre</label>
+              <label class="check"><input type="checkbox" value="ced"> Cédula</label>
+              <label class="check"><input type="checkbox" value="cat"> Categoría</label>
+              <label class="check"><input type="checkbox" value="extra"> Dato extra</label>
+              <label class="check"><input type="checkbox" value="code"> Código</label>
+              <label class="check"><input type="checkbox" value="issue"> Fecha de emisión</label>
+              <label class="check"><input type="checkbox" value="photo"> Foto</label>
+            </div></div>
+          <label class="check"><input type="checkbox" id="cl-registry"> Mostrar el registro de emitidos</label>
+          <div class="row" style="margin-bottom:8px">
+            <button class="btn sm" id="cl-save" type="button">Guardar perfil</button>
+            <button class="btn sm danger" id="cl-del" type="button">Eliminar</button>
+          </div>
+          <p class="note" id="cl-link" style="margin-top:0"></p>
         </fieldset>
 
         <fieldset class="group"><legend>Conexión con el middleware</legend>
@@ -416,11 +427,15 @@
   </details>
 </main>
 
-<div id="print-area"></div>
-
 <script>
 (() => {
 "use strict";
+// Modo kiosko: /c/<cliente> inyecta window.KIOSK (plantilla fija, campos que se pueden llenar).
+const KIOSK=window.KIOSK||null;
+const FIELD_INPUT={name:"d-name",ced:"d-ced",cat:"d-cat",extra:"d-extra",code:"d-code",issue:"d-issue",photo:"d-photo"};
+const EDITABLE=new Set(KIOSK?KIOSK.editable:Object.keys(FIELD_INPUT));
+const canEdit=bindId=>!KIOSK || [...EDITABLE].some(f=>FIELD_INPUT[f]===bindId);
+if(KIOSK) document.body.classList.add("kiosk");
 const $ = (s,r=document)=>r.querySelector(s);
 const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 const esc = s => String(s??"").replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -608,16 +623,17 @@ function data(){
 }
 // preview=true: la vista previa agrega huecos tocables (logos, dato extra); la imagen impresa no.
 function cardFrontHTML(t,d,preview=false){
+  const slots=preview&&!KIOSK;   // huecos tocables: no en modo kiosko
   const photo = img.photo
     ? `<img class="photo" src="${img.photo}" alt="">`
     : `<div class="photo ph">FOTO</div>`;
   const seal = sealImg(t) ? `<div class="seal" style="${sealStyle(t)}"></div>` : "";
   const logo=(k,id,label)=>img[k]
-    ? `<img src="${img[k]}" alt=""${preview?` data-upload="${id}" title="Toca para cambiar el ${label}"`:""}>`
-    : preview?`<div class="ph-slot" data-upload="${id}" title="Toca para subir el ${label}">+ ${label}</div>`:"";
+    ? `<img src="${img[k]}" alt=""${slots?` data-upload="${id}" title="Toca para cambiar el ${label}"`:""}>`
+    : slots?`<div class="ph-slot" data-upload="${id}" title="Toca para subir el ${label}">+ ${label}</div>`:"";
   const l1 = logo("logo1","t-logo1","logo 1");
   const l2 = logo("logo2","t-logo2","logo 2");
-  const sealChip = preview && !sealImg(t) ? `<div class="ph-chip" data-upload="t-seal" title="Toca para subir el sello / marca de agua">+ sello</div>` : "";
+  const sealChip = slots && !sealImg(t) ? `<div class="ph-chip" data-upload="t-seal" title="Toca para subir el sello / marca de agua">+ sello</div>` : "";
   return `<div class="card" style="--card-bg:${t.cardbg};--card-band:${t.band};--card-accent:${t.accent}">
     ${seal}${sealChip}
     <div class="band">
@@ -631,7 +647,7 @@ function cardFrontHTML(t,d,preview=false){
         <div class="fld"><div class="k kblack">Nombre</div><div class="v big kblack" data-bind="d-name">${esc(d.name)||"—"}</div></div>
         <div class="fld"><div class="k kblack">Cédula</div><div class="v kblack" data-bind="d-ced">${esc(d.ced)||"—"}</div></div>
         <div class="fld"><div class="k kblack">Categoría</div><div class="v kblack" data-bind="d-cat">${esc(d.cat)||"—"}</div></div>
-        ${d.extra||preview?`<div class="fld"><div class="k kblack">—</div><div class="v kblack" data-bind="d-extra">${esc(d.extra)}</div></div>`:""}
+        ${d.extra||(preview&&canEdit("d-extra"))?`<div class="fld"><div class="k kblack">—</div><div class="v kblack" data-bind="d-extra">${esc(d.extra)}</div></div>`:""}
         <div class="footer">
           <div class="dates">
             <div class="fld"><div class="k kblack">Fecha de emisión</div><div class="v kblack">${fmtDate(d.issue)}</div></div>
@@ -645,8 +661,8 @@ function cardFrontHTML(t,d,preview=false){
 function cardBackHTML(t,d,preview=false){
   const seal = sealImg(t) ? `<div class="seal" style="${sealStyle(t)}"></div>` : "";
   const sign = img.sign
-    ? `<img src="${img.sign}" alt=""${preview?` data-upload="t-sign" title="Toca para cambiar la firma"`:""}>`
-    : preview?`<div class="ph-slot sign-slot" data-upload="t-sign" title="Toca para subir la firma">+ firma</div>`:"";
+    ? `<img src="${img.sign}" alt=""${preview&&!KIOSK?` data-upload="t-sign" title="Toca para cambiar la firma"`:""}>`
+    : preview&&!KIOSK?`<div class="ph-slot sign-slot" data-upload="t-sign" title="Toca para subir la firma">+ firma</div>`:"";
   return `<div class="card back" style="--card-bg:${t.cardbg};--card-band:${t.band};--card-accent:${t.accent}">
     ${seal}
     <div class="backband"><span class="org${(t.org||"").length>25?" long":""}" style="${titleStyles(t).org}" data-bind="t-org">${esc(t.org)||""}</span></div>
@@ -679,6 +695,7 @@ const INLINE_HINTS={"d-name":"Nombre y apellidos","d-ced":"000-0000000-0","d-cat
 function enableInlineEdit(){
   $$("#pv-front [data-bind], #pv-back [data-bind]").forEach(el=>{
     const field=$("#"+el.dataset.bind); if(!field) return;
+    if(!canEdit(field.id)){ el.removeAttribute("data-bind"); return; }
     el.contentEditable="plaintext-only";
     el.spellcheck=false;
     el.title="Toca para editar";
@@ -725,8 +742,8 @@ function inlineCommit(el){
   });
   host.addEventListener("click",e=>{
     const up=e.target.closest("[data-upload]");
-    if(up) $("#"+up.dataset.upload).click();
-    else if(e.target.closest(".photo")) $("#d-photo").click();
+    if(up && !KIOSK) $("#"+up.dataset.upload).click();
+    else if(e.target.closest(".photo") && canEdit("d-photo")) $("#d-photo").click();
   });
 });
 [...Object.values(TPL_FIELDS).map(([id])=>id),"d-name","d-code","d-cat","d-extra","d-issue"]
@@ -855,107 +872,88 @@ async function renderRegistry(){
 }
 
 /* ---------- Impresoras y ajustes (settings.json junto al .exe) ---------- */
-const PRINTERS={
-  "entrust-api":{
-    label:"Entrust Sigma DS3", mode:"cr80", bleed:true, rotate:false, ox:0, oy:0,
-    canvas:{w:1015,h:640},   // DS3: página física del driver a 300 ppp (incluye ~2 px de sangrado por lado)
-    api:{printer:"entrust-sigma-ds3"},
-    note:"Imprime sin diálogo por el SDK de Entrust: frente y reverso a 1015 × 640 px (300 ppp) a doble cara. "+
-         "Espera a que la tarjeta salga (30-60 s) y avisa si la impresora reporta un error."
-  },
-  carta:{
-    label:"Hoja carta", mode:"carta", bleed:false, rotate:false, ox:0, oy:0,
-    note:"Imprime frente y reverso en una hoja carta con guías de corte, por el diálogo del navegador "+
-         "(escala 100 % y “Gráficos de fondo”). Sirve para revisar el diseño sin gastar tarjetas."
-  }
-};
-const DEFAULT_SETTINGS={printer:"entrust-api",quality:"fine",hopper:"",cal:{}};
-let SETTINGS={...DEFAULT_SETTINGS}, settingsTimer=0;
+// Todo se imprime por el API (PNG directo al SDK); no hay impresión por el navegador.
+const CANVAS={w:1015,h:640};   // DS3: página física del driver a 300 ppp (incluye ~2 px de sangrado por lado)
+const DEFAULT_CAL={rotate:false,split:false,ox:0,oy:0};
+const DEFAULT_SETTINGS={printer:"",quality:"fine",hopper:"",cal:{}};
+let SETTINGS={...DEFAULT_SETTINGS}, settingsTimer=0, PRINTER_LIST=[];
+const curPrinter=()=>PRINTER_LIST.find(p=>p.id===$("#printer").value)||null;
 async function loadSettings(){
   const saved=await api("/settings");
   SETTINGS={...DEFAULT_SETTINGS,...saved,cal:{...(saved.cal||{})}};
-  // Calibración que antes vivía en este navegador: se sube una vez
-  if(!saved.cal){
-    try{
-      const old=JSON.parse(localStorage.getItem("carnet-calibracion-v1")||"null");
-      if(old){ Object.keys(PRINTERS).forEach(p=>{ if(old[p]) SETTINGS.cal[p]=old[p]; }); saveSettings(); }
-    }catch{}
-  }
 }
 function saveSettings(){
+  if(KIOSK) return;   // el kiosko nunca modifica la configuración
   clearTimeout(settingsTimer);
   settingsTimer=setTimeout(()=>jsonPut("/settings",SETTINGS).catch(
     e=>setStatus("No se pudo guardar el ajuste: "+e.message,"bad")),500);
 }
+async function loadPrinters(){
+  PRINTER_LIST=await api("/printers");
+  const sel=$("#printer");
+  sel.innerHTML=PRINTER_LIST.map(p=>`<option value="${esc(p.id)}">${esc(p.label)}</option>`).join("")
+    ||'<option value="">(sin impresoras en printers.yaml)</option>';
+  if(PRINTER_LIST.some(p=>p.id===SETTINGS.printer)) sel.value=SETTINGS.printer;
+}
 function applyPrinter(){
-  const p=$("#printer").value, def=PRINTERS[p], v={...def,...SETTINGS.cal[p]};
-  $("#opt-bleed").checked=!!v.bleed; $("#opt-rotate").checked=!!v.rotate;
-  $("#opt-split").checked=!!v.split;
+  const p=$("#printer").value, v={...DEFAULT_CAL,...SETTINGS.cal[p]};
+  $("#opt-rotate").checked=!!v.rotate; $("#opt-split").checked=!!v.split;
   $("#off-x").value=v.ox||0; $("#off-y").value=v.oy||0;
-  $$("[data-only-api]").forEach(el=>el.hidden=!def.api);
-  $("#printer-note").textContent=def.note+(SETTINGS.cal[p]?" · Calibración guardada para esta impresora.":"");
+  $("#printer-note").textContent="Imprime sin diálogo por el SDK de Entrust: frente y reverso a "+CANVAS.w+" × "+CANVAS.h+
+    " px (300 ppp), a doble cara. Espera a que la tarjeta salga (30-60 s) y avisa si la impresora reporta un error."+
+    (SETTINGS.cal[p]?" · Calibración guardada para esta impresora.":"");
   refreshPrinterChip();
 }
 function readCal(){
-  return {bleed:$("#opt-bleed").checked,rotate:$("#opt-rotate").checked,split:$("#opt-split").checked,
+  return {rotate:$("#opt-rotate").checked,split:$("#opt-split").checked,
           ox:parseFloat($("#off-x").value||0),oy:parseFloat($("#off-y").value||0)};
 }
 $("#printer").addEventListener("change",()=>{ SETTINGS.printer=$("#printer").value; saveSettings(); applyPrinter(); });
-$$("#opt-bleed,#opt-rotate,#opt-split,#off-x,#off-y").forEach(el=>el.addEventListener("change",()=>{
+$$("#opt-rotate,#opt-split,#off-x,#off-y").forEach(el=>el.addEventListener("change",()=>{
   SETTINGS.cal[$("#printer").value]=readCal(); saveSettings(); applyPrinter();
 }));
 $("#adv-quality").addEventListener("change",e=>{ SETTINGS.quality=e.target.value; saveSettings(); });
 $("#adv-hopper").addEventListener("change",e=>{ SETTINGS.hopper=e.target.value; saveSettings(); });
 $("#cal-reset").addEventListener("click",()=>{
   const p=$("#printer").value; delete SETTINGS.cal[p]; saveSettings(); applyPrinter();
-  setStatus("Calibración restablecida para "+PRINTERS[p].label+".","ok");
+  setStatus("Calibración restablecida.","ok");
 });
-$("#cal-test").addEventListener("click",()=>{
+// Tarjeta de calibración: va por el API como cualquier carnet (solo cinta de color, sin capa K).
+// Coordenadas en px de tarjeta (4 px/mm: 342.4 × 216); rasterizeFace ya aplica X/Y y el giro.
+function calCard(side,ox,oy){
+  const tick=(x,y,w,h)=>`<div style="position:absolute;left:${x}px;top:${y}px;width:${w}px;height:${h}px;background:#000"></div>`;
+  let marks="";
+  for(let mm=5;mm<86;mm+=5){ const len=mm%10?8:14; marks+=tick(mm*4,0,1,len)+tick(mm*4,216-len,1,len); }
+  for(let mm=5;mm<54;mm+=5){ const len=mm%10?8:14; marks+=tick(0,mm*4,len,1)+tick(342.4-len,mm*4,len,1); }
+  return `<div class="card" style="--card-bg:#fff;font:600 11px/1 Arial,sans-serif;color:#000">
+    <div style="position:absolute;inset:0;border:1.2px solid #000;box-sizing:border-box"></div>${marks}
+    ${tick(171,0,1,216)}${tick(0,108,342.4,1)}
+    <div style="position:absolute;left:155px;top:92px;width:32px;height:32px;border:1.2px solid #000;border-radius:50%"></div>
+    <div style="position:absolute;left:20px;top:20px">${side}</div>
+    <div style="position:absolute;right:20px;top:20px">Calibración</div>
+    <div style="position:absolute;left:20px;bottom:20px">X ${ox} mm · Y ${oy} mm</div>
+    <div style="position:absolute;right:20px;bottom:20px">85.6 × 54 mm</div></div>`;
+}
+$("#cal-test").addEventListener("click",()=>withBusy(async()=>{
   const ox=parseFloat($("#off-x").value||0), oy=parseFloat($("#off-y").value||0);
-  const p=PRINTERS[$("#printer").value];
-  const ticks=(horiz)=>{let s="";for(let i=5;i<(horiz?86:54);i+=5){
-    s+=horiz
-      ?`<div style="position:absolute;left:${i}mm;top:0;width:.2mm;height:${i%10?2:3.5}mm;background:#000"></div>`+
-        `<div style="position:absolute;left:${i}mm;bottom:0;width:.2mm;height:${i%10?2:3.5}mm;background:#000"></div>`
-      :`<div style="position:absolute;top:${i}mm;left:0;height:.2mm;width:${i%10?2:3.5}mm;background:#000"></div>`+
-        `<div style="position:absolute;top:${i}mm;right:0;height:.2mm;width:${i%10?2:3.5}mm;background:#000"></div>`;
-  } return s;};
-  const target=(cara)=>`<div style="width:85.6mm;height:54mm;position:relative;
-      transform:translate(${ox}mm,${oy}mm);box-sizing:border-box;
-      outline:.3mm solid #000;outline-offset:-.3mm;font:600 3mm/1 Arial,sans-serif;color:#000">
-      ${ticks(true)}${ticks(false)}
-      <div style="position:absolute;left:42.8mm;top:0;width:.2mm;height:54mm;background:#bbb"></div>
-      <div style="position:absolute;top:27mm;left:0;height:.2mm;width:85.6mm;background:#bbb"></div>
-      <div style="position:absolute;left:38.8mm;top:23mm;width:8mm;height:8mm;border:.3mm solid #000;border-radius:50%"></div>
-      <div style="position:absolute;left:5mm;top:5mm">${cara}</div>
-      <div style="position:absolute;right:5mm;top:5mm">${p.label}</div>
-      <div style="position:absolute;left:5mm;bottom:5mm">X ${ox} mm · Y ${oy} mm</div>
-      <div style="position:absolute;right:5mm;bottom:5mm">85.6 × 54 mm</div>
-    </div>`;
-  const rot=$("#opt-rotate").checked;
-  const back=rot?`<div style="transform:rotate(180deg)">${target("REVERSO")}</div>`:target("REVERSO");
-  $("#print-area").innerHTML = p.mode==="cr80"
-    ? `<div class="pg-cr80">${target("FRENTE")}</div><div class="pg-cr80">${back}</div>`
-    : `<div class="pg-carta"><div class="carta-card">${target("FRENTE")}</div><div class="carta-card">${back}</div></div>`;
-  window.print();
-  setStatus("Mide el borde impreso: si no cae en 85.6 × 54 mm, ajusta X e Y y repite.","ok");
-});
+  const ok=await runJob({frontHTML:calCard("FRENTE",ox,oy),backHTML:calCard("REVERSO",ox,oy),withK:false,templateId:null});
+  if(ok) setStatus("Mide el borde impreso: si no cae en 85.6 × 54 mm, ajusta X e Y y repite.","ok");
+}));
 
 /* ---------- Estado de la impresora (encabezado) ---------- */
 async function refreshPrinterChip(){
-  const def=PRINTERS[$("#printer").value], chip=$("#printer-chip");
-  if(!def.api){ chip.textContent="Hoja carta · diálogo del navegador"; chip.dataset.state="unknown"; return; }
+  const chip=$("#printer-chip");
   try{
-    const p=(await api("/printers")).find(x=>x.id===def.api.printer);
+    PRINTER_LIST=await api("/printers");
+    const p=curPrinter();
     const txt={ready:"lista",offline:"sin conexión",unknown:"estado desconocido"};
-    chip.textContent=p?`${p.label}: ${txt[p.status]||p.status}`:"Impresora no configurada en printers.yaml";
+    chip.textContent=p?`${p.label}: ${txt[p.status]||p.status}`:"Sin impresora configurada (printers.yaml)";
     chip.dataset.state=p?p.status:"bad";
   }catch(e){ chip.textContent="Sin conexión con el middleware"; chip.dataset.state="bad"; }
 }
 setInterval(()=>{ if(!busy && !document.hidden) refreshPrinterChip(); },30000);
 
 /* ---------- Impresión vía middleware (API) ---------- */
-const API_W=1011, API_H=638;            // CR80 a 300 ppp
 const API_URL_KEY="carnet-api-url", API_KEY_KEY="carnet-api-key";
 function apiBase(){
   return ($("#api-url").value.trim()||"").replace(/\/+$/,"");
@@ -965,6 +963,7 @@ function loadApiCfg(){
   let url="", key="";
   try{url=localStorage.getItem(API_URL_KEY)||""; key=localStorage.getItem(API_KEY_KEY)||"";}catch{}
   if(!url) url=location.protocol.startsWith("http")?location.origin:"http://localhost:8787";
+  if(KIOSK){ key=KIOSK.api_key||key; url=location.origin; }   // el kiosko no guarda la clave en el navegador
   $("#api-url").value=url; $("#api-key").value=key;
 }
 function saveApiCfg(){
@@ -996,7 +995,7 @@ const LAYER_CSS={
      .card img,.card .seal{visibility:hidden!important}
      .card .kblack{color:#000!important}`
 };
-async function rasterizeFace(cardHTML,{rotate,ox,oy,w=API_W,h=API_H,layer="color"}){
+async function rasterizeFace(cardHTML,{rotate,ox,oy,w=CANVAS.w,h=CANVAS.h,layer="color"}){
   const css=[...document.styleSheets].flatMap(s=>[...s.cssRules]).map(r=>r.cssText).join("\n");
   const scale=Math.max(w/342.4,h/216);
   const dx=(w-342.4*scale)/2, dy=(h-216*scale)/2;
@@ -1039,82 +1038,64 @@ function apiOptions(allowed){
   return Object.fromEntries(Object.entries(o).filter(([k,v])=>
     k in allowed && (!allowed[k].length || allowed[k].includes(v))));
 }
-async function sendToApi(card){
-  const cfg=PRINTERS[$("#printer").value].api;
+// Genera los PNG de las caras, los manda a imprimir y espera a que la tarjeta salga.
+// Devuelve true si se imprimió; si no, deja el motivo en la barra de estado.
+async function runJob({frontHTML,backHTML,control=null,withK=true,templateId=CUR_TPL}){
+  const printer=curPrinter();
+  if(!printer){ setStatus("No hay impresora configurada en printers.yaml.","bad"); return false; }
   const rot=$("#opt-rotate").checked;
   const ox=parseFloat($("#off-x").value||0), oy=parseFloat($("#off-y").value||0);
   try{
     setStatus("Generando imágenes y enviando al middleware…","warn");
-    const now={...img}; Object.assign(img, card.img||img);
-    const frontHTML=cardFrontHTML(card.tpl,card.data), backHTML=cardBackHTML(card.tpl,card.data);
-    Object.assign(img, now);
-    const {w,h}=PRINTERS[$("#printer").value].canvas||{w:API_W,h:API_H};
+    const {w,h}=CANVAS;
     const face=(html,rotate,layer)=>rasterizeFace(html,{rotate,ox,oy,w,h,layer});
-    const [front,back,frontK,backK]=await Promise.all([
-      face(frontHTML,false,"color"), face(backHTML,rot,"color"),
-      face(frontHTML,false,"k"),     face(backHTML,rot,"k")]);
+    const [front,back]=await Promise.all([face(frontHTML,false,"color"),face(backHTML,rot,"color")]);
     const fd=new FormData();
-    fd.append("printer_id",cfg.printer);
-    if(CUR_TPL) fd.append("template_id",CUR_TPL);   // si no, el API usa la plantilla activa
+    fd.append("printer_id",printer.id);
+    if(templateId) fd.append("template_id",templateId);   // si no, el API usa la plantilla activa
+    if(control) fd.append("control",control);              // nombra la carpeta de PNG
     fd.append("front",front,"front.png"); fd.append("back",back,"back.png");
-    // Capa negra aparte (1 bit, mismo tamaño): el puente la imprime por el panel K
-    fd.append("front_k",frontK,"front_k.png"); fd.append("back_k",backK,"back_k.png");
-    // Solo opciones que el middleware permite para esa impresora (en Windows van vacías: se fijan en el driver)
+    if(withK){
+      // Capa negra aparte (1 bit, mismo tamaño): el puente la imprime por el panel K
+      const [frontK,backK]=await Promise.all([face(frontHTML,false,"k"),face(backHTML,rot,"k")]);
+      fd.append("front_k",frontK,"front_k.png"); fd.append("back_k",backK,"back_k.png");
+    }
     let allowed={};
-    try{const ro=await fetch(apiBase()+"/printers/"+cfg.printer+"/options",{headers:apiHeaders()}); if(ro.ok) allowed=await ro.json();}catch{}
-    const opts=apiOptions(allowed);
-    fd.append("options",JSON.stringify(opts));
+    try{const ro=await fetch(apiBase()+"/printers/"+printer.id+"/options",{headers:apiHeaders()}); if(ro.ok) allowed=await ro.json();}catch{}
+    fd.append("options",JSON.stringify(apiOptions(allowed)));
     const r=await fetch(apiBase()+"/jobs",{method:"POST",headers:apiHeaders(),body:fd});
-    if(r.status===401) return setStatus("API key inválida (abre “Conexión al middleware”).","bad");
-    if(!r.ok){const e=await r.json().catch(()=>({})); return setStatus("Error del middleware: "+(e.detail||r.status),"bad");}
+    if(r.status===401){ setStatus("API key inválida (abre «Avanzado» > Conexión).","bad"); return false; }
+    if(!r.ok){const e=await r.json().catch(()=>({})); setStatus("Error del middleware: "+(e.detail||r.status),"bad"); return false;}
     let job=await r.json();
-    const label=PRINTERS[$("#printer").value].label, t0=Date.now();
+    const pngDir=job.png_dir;   // solo viene en la respuesta del POST
+    const label=printer.label, t0=Date.now();
     // Con SDK (Entrust) el trabajo sigue en cola hasta que la tarjeta sale: 30-60 s por carnet.
     while(job.state==="queued" && Date.now()-t0<6*60*1000){
       setStatus(`Imprimiendo en ${label}… ${Math.round((Date.now()-t0)/1000)} s`,"warn");
       await new Promise(ok=>setTimeout(ok,1000));
       job=await (await fetch(apiBase()+"/jobs/"+job.id,{headers:apiHeaders()})).json();
     }
-    if(job.state==="failed") return setStatus("La impresión falló: "+(job.error||"error"),"bad");
-    if(job.state==="queued") return setStatus(`Sigue en cola en ${label} tras 6 min: revisa la impresora.`,"bad");
-    clearDraft();   // impreso: el borrador ya no hace falta
-    setStatus(job.state==="printed"
+    if(job.state==="failed"){ setStatus("La impresión falló: "+(job.error||"error"),"bad"); return false; }
+    if(job.state==="queued"){ setStatus(`Sigue en cola en ${label} tras 6 min: revisa la impresora.`,"bad"); return false; }
+    setStatus((job.state==="printed"
       ? `Impreso en ${label} (trabajo ${job.backend_job_id||job.id}).`
-      : `Enviado a ${label} (trabajo ${job.backend_job_id||job.id}).`,"ok");
+      : `Enviado a ${label} (trabajo ${job.backend_job_id||job.id}).`)+
+      (pngDir?` PNG guardados en png/${pngDir}.`:""),"ok");
+    return true;
   }catch(err){
-    setStatus("No se pudo imprimir por API: "+(err&&err.message||err),"bad");
+    setStatus("No se pudo imprimir: "+(err&&err.message||err),"bad");
+    return false;
   }
 }
-
-/* ---------- Impresión ---------- */
-function buildPrint(card){
-  if(PRINTERS[$("#printer").value].api) return sendToApi(card);
-  const mode=PRINTERS[$("#printer").value].mode;
-  const bleed=$("#opt-bleed").checked, rot=$("#opt-rotate").checked;
-  const ox=parseFloat($("#off-x").value||0), oy=parseFloat($("#off-y").value||0);
-  const t=card.tpl, d=card.data;
-  // reinyectar imágenes del carnet guardado
-  const saved=img, now={...img};
-  Object.assign(img, card.img||img);
-  const front=cardFrontHTML(t,d), back=cardBackHTML(t,d);
+async function printCard(card){
+  const now={...img}; Object.assign(img, card.img||img);   // imágenes del carnet guardado
+  const frontHTML=cardFrontHTML(card.tpl,card.data), backHTML=cardBackHTML(card.tpl,card.data);
   Object.assign(img, now);
-  const shift=`transform:translate(${ox}mm,${oy}mm)`;
-  const scaleFront=`<div style="width:85.6mm;height:54mm;${shift}">${scaleWrap(front)}</div>`;
-  const backInner=rot?`<div style="transform:rotate(180deg);width:85.6mm;height:54mm">${scaleWrap(back)}</div>`:scaleWrap(back);
-  const scaleBack=`<div style="width:85.6mm;height:54mm;${shift}">${backInner}</div>`;
-  let html="";
-  if(mode==="cr80"){
-    html=`<div class="pg-cr80">${scaleFront}</div><div class="pg-cr80">${scaleBack}</div>`;
-  }else{
-    html=`<div class="pg-carta"><div class="carta-card">${scaleFront}</div><div class="carta-card">${scaleBack}</div></div>`;
+  const ok=await runJob({frontHTML,backHTML,control:card.control!=="—"?card.control:null,templateId:card.templateId||CUR_TPL});
+  if(ok){
+    clearDraft();   // impreso: el borrador ya no hace falta
+    if(KIOSK) clearTitular();   // listo para la siguiente persona
   }
-  $("#print-area").innerHTML=html;
-  window.print();
-}
-// preview usa 4px/mm (342.4px); impresión usa mm reales → escala 25% * (10/4)... usamos transform scale
-function scaleWrap(innerCardHTML){
-  // La tarjeta interna mide 342.4px x 216px (4px/mm). 85.6mm = 342.4px → factor 0.25mm/px.
-  return `<div style="width:342.4px;height:216px;transform:scale(0.25);transform-origin:top left">${innerCardHTML}</div>`;
 }
 
 /* ---------- Generar ---------- */
@@ -1152,7 +1133,7 @@ async function generateNow(register){
     card={control:"—",tpl:t,data:d,img:{...img}};
     setStatus("Impresión sin registrar.","warn");
   }
-  await buildPrint(card);
+  await printCard(card);
 }
 $("#generate").addEventListener("click",()=>generate(true));
 $("#preview-print").addEventListener("click",()=>generate(false));
@@ -1162,7 +1143,7 @@ $("#reg-body").addEventListener("click",async e=>{
   const rp=e.target.dataset.reprint, vd=e.target.dataset.void;
   if(rp){
     const all=await getAll(); const c=all.find(x=>x.control===rp);
-    if(c) await withBusy(async()=>{c.prints=(c.prints||1)+1; await putCard(c); await renderRegistry(); await buildPrint(c);});
+    if(c) await withBusy(async()=>{c.prints=(c.prints||1)+1; await putCard(c); await renderRegistry(); await printCard(c);});
   }
   if(vd){
     if(!confirm(`¿Anular el carnet ${vd}? No se podrá revertir.`)) return;
@@ -1224,28 +1205,93 @@ function download(name,type,content){
   URL.revokeObjectURL(url);
 }
 
+/* ---------- Clientes (modo kiosko): perfiles en clients.json ---------- */
+let CLIENTS={};
+function renderClients(){
+  const sel=$("#cl-select");
+  sel.innerHTML='<option value="">+ Nuevo perfil</option>'+Object.entries(CLIENTS).map(([id,c])=>
+    `<option value="${esc(id)}">${esc(c.name)}</option>`).join("");
+  $("#cl-tpl").innerHTML=Object.entries(TPLS).map(([id,t])=>`<option value="${esc(id)}">${esc(t.name||id)}</option>`).join("");
+  fillClientForm(sel.value);
+}
+function fillClientForm(id){
+  const c=CLIENTS[id]||{name:"",template_id:ACTIVE_TPL||CUR_TPL||"",editable:["name","ced","cat"],show_registry:false};
+  $("#cl-select").value=id; $("#cl-name").value=c.name; $("#cl-tpl").value=c.template_id;
+  $$("#cl-fields input").forEach(cb=>cb.checked=c.editable.includes(cb.value));
+  $("#cl-registry").checked=!!c.show_registry;
+  const url=id?`${location.origin}/c/${id}`:"";
+  $("#cl-link").innerHTML=id
+    ? `Abrir: <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a><br>o con el programa: <code>CarnetPrint.exe --client ${esc(id)}</code>`
+    : "Guarda el perfil para obtener su enlace.";
+  $("#cl-del").hidden=!id;
+}
+$("#cl-select").addEventListener("change",e=>fillClientForm(e.target.value));
+$("#cl-save").addEventListener("click",async()=>{
+  const name=$("#cl-name").value.trim(); if(!name) return setStatus("Falta el nombre del cliente.","bad");
+  const id=$("#cl-select").value||slug(name); if(!id) return setStatus("Nombre no válido.","bad");
+  const body={name,template_id:$("#cl-tpl").value,show_registry:$("#cl-registry").checked,
+    editable:$$("#cl-fields input:checked").map(cb=>cb.value)};
+  try{
+    CLIENTS[id]=await jsonPut("/clients/"+encodeURIComponent(id),body);
+    renderClients(); $("#cl-select").value=id; fillClientForm(id);
+    setStatus(`Perfil «${name}» guardado.`,"ok");
+  }catch(e){ setStatus("No se pudo guardar el perfil: "+e.message,"bad"); }
+});
+$("#cl-del").addEventListener("click",async()=>{
+  const id=$("#cl-select").value; if(!id||!confirm(`¿Eliminar el perfil «${CLIENTS[id]?.name||id}»?`)) return;
+  try{ await api("/clients/"+encodeURIComponent(id),{method:"DELETE"}); delete CLIENTS[id]; renderClients(); setStatus("Perfil eliminado.","ok"); }
+  catch(e){ setStatus("No se pudo eliminar: "+e.message,"bad"); }
+});
+
+/* ---------- Modo kiosko: plantilla fija y solo los campos permitidos ---------- */
+function setupKiosk(){
+  document.title=KIOSK.name;
+  $("header.app h1").textContent=KIOSK.name;
+  if(!KIOSK.show_registry) $("#registry").hidden=true;
+  if(!EDITABLE.has("photo")) $("#photo-asset").hidden=true;
+  if(!EDITABLE.has("ced")) $("#lookup-field").hidden=true;
+  ["extra","issue"].forEach(f=>{ if(!EDITABLE.has(f)) $("#"+FIELD_INPUT[f]).disabled=true; });
+  $("#generate").textContent="Generar e imprimir";
+}
+
 /* ---------- Init ---------- */
 (async()=>{
   loadApiCfg();
+  if(KIOSK){
+    if(!$("#api-key").value){   // abierto desde otra PC: el servidor no entrega la clave
+      const k=prompt("API key de CarnetPrint (está en el archivo .env junto al .exe):");
+      if(k) $("#api-key").value=k.trim();
+    }
+    setupKiosk();
+  }
   render();   // la tarjeta se dibuja aunque el middleware no responda
   try{
     await loadSettings();
-    if(PRINTERS[SETTINGS.printer]) $("#printer").value=SETTINGS.printer;
     $("#adv-quality").value=SETTINGS.quality; $("#adv-hopper").value=SETTINGS.hopper;
+    await loadPrinters();
   }catch{}
   applyPrinter();
   if(restoreDraft()) setStatus("Se recuperó el borrador del titular sin imprimir.","ok");
   try{
     await refreshTemplates();
-    if(await migrateLegacy()) await refreshTemplates();
-    if(CUR_TPL) applyTpl(TPLS[CUR_TPL]);
-    tplReady=true;
+    if(KIOSK){
+      if(!TPLS[KIOSK.template_id]) throw new Error("la plantilla de este cliente ya no existe");
+      CUR_TPL=KIOSK.template_id;          // fija; tplReady sigue en false: no se autoguarda nada
+      applyTpl(TPLS[CUR_TPL]);
+    }else{
+      if(await migrateLegacy()) await refreshTemplates();
+      if(CUR_TPL) applyTpl(TPLS[CUR_TPL]);
+      tplReady=true;
+      CLIENTS=await api("/clients"); renderClients();
+    }
     await renderRegistry();
   }
   catch(e){
     setStatus("Sin conexión con el middleware ("+e.message+").","warn");
-    $("#advanced").open=true;   // ahí está la URL y la API key
-    if(/API key/.test(e.message)) $("#api-key").focus();
+    if(!KIOSK){
+      $("#advanced").open=true;   // ahí está la URL y la API key
+      if(/API key/.test(e.message)) $("#api-key").focus();
+    }
   }
 })();
 $("#open-adv").addEventListener("click",()=>{ $("#advanced").open=true; });
